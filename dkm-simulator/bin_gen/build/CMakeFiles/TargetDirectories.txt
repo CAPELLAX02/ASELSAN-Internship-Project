@@ -1,0 +1,3 @@
+/Users/capellax/Projects/aselsan/dkm-simulator/bin_gen/build/CMakeFiles/bin_gen.dir
+/Users/capellax/Projects/aselsan/dkm-simulator/bin_gen/build/CMakeFiles/edit_cache.dir
+/Users/capellax/Projects/aselsan/dkm-simulator/bin_gen/build/CMakeFiles/rebuild_cache.dir

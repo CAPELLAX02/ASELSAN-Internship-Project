@@ -2,16 +2,33 @@
 
 #include <algorithm>
 #include <mutex>
-#include <ws2tcpip.h>
-// clang-format off
-#include <winsock2.h>
-// clang-format on
+
+#ifdef _WIN32
+    #include <ws2tcpip.h>
+    // clang-format off
+    #include <winsock2.h>
+    // clang-format on
+#else
+    #include <arpa/inet.h>
+    #include <netdb.h>
+    #include <netinet/in.h>
+    #include <sys/socket.h>
+    #include <unistd.h>
+
+    using SOCKET = int;
+    constexpr int INVALID_SOCKET = -1;
+    constexpr int SOCKET_ERROR = -1;
+    // :: kullanarak global POSIX close fonksiyonunu işaret ediyoruz, 
+    // sınıfın kendi close() fonksiyonuyla çakışmasını engelliyoruz.
+    #define closesocket ::close
+#endif
 
 namespace
 {
 
 void ensure_winsock_initialized()
 {
+#ifdef _WIN32
     static std::once_flag once;
     std::call_once(once,
                    []
@@ -22,6 +39,7 @@ void ensure_winsock_initialized()
                        // mock_r's tcp_socket.cpp: sockets here live for the process
                        // lifetime.
                    });
+#endif
 }
 
 }  // namespace
@@ -123,8 +141,8 @@ bool TcpServer::listen(const std::string& host, std::uint16_t port)
             continue;
         }
 
-        const char reuse = 1;
-        setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+        int reuse = 1;
+        setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse));
 
         if (::bind(sock, p->ai_addr, static_cast<int>(p->ai_addrlen)) == 0 && ::listen(sock, SOMAXCONN) == 0)
         {

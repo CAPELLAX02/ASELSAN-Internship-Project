@@ -82,7 +82,12 @@ namespace
         const auto ms = duration_cast<milliseconds>(now.time_since_epoch()).count() % 1000;
         const std::time_t sec = system_clock::to_time_t(now);
         std::tm tm{};
+
+#ifdef _WIN32
         localtime_s(&tm, &sec);
+#else
+        localtime_r(&sec, &tm);
+#endif
 
         std::lock_guard<std::mutex> lock(g_log_mutex);
         std::cout << std::put_time(&tm, "%H:%M:%S") << '.' << std::setw(3) << std::setfill('0') << ms << "  " << link
