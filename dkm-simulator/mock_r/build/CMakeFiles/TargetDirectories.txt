@@ -1,0 +1,3 @@
+/Users/capellax/Projects/aselsan/dkm-simulator/mock_r/build/CMakeFiles/mock_r.dir
+/Users/capellax/Projects/aselsan/dkm-simulator/mock_r/build/CMakeFiles/edit_cache.dir
+/Users/capellax/Projects/aselsan/dkm-simulator/mock_r/build/CMakeFiles/rebuild_cache.dir
