@@ -1,0 +1,13 @@
+# Scrapes the gateway. The gateway normally runs on the host rather than in a
+# container, so the target is the host as seen from inside Docker.
+global:
+  scrape_interval: 1s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: dkm-gateway
+    metrics_path: /q/metrics
+    static_configs:
+      - targets: ["host.docker.internal:8080"]
+        labels:
+          instance: gateway

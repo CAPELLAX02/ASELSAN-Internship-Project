@@ -1,0 +1,143 @@
+{
+  "version": "1.1.0",
+  "description": "DKM message interface, derived from mock_r/inc/interface/*.h. Regenerate with HeaderSchemaGenerator; SchemaDriftTest fails if the headers and this file disagree.",
+  "sourceHeaders": [
+    "interface/common.h",
+    "interface/def.h",
+    "interface/rsp.h",
+    "interface/rsm.h",
+    "interface/crm.h"
+  ],
+  "constants": {
+    "MAXIMUM_DETECTIONS_PER_BEAM": 8
+  },
+  "modules": [
+    { "name": "RDP", "id": 1, "role": "DKM", "description": "The module under test. Never a link of its own -- it is the peer at the far end of every link." },
+    { "name": "RSP", "id": 2, "role": "PEER", "port": 5001, "description": "Radar Signal Processor link." },
+    { "name": "RSM", "id": 3, "role": "PEER", "port": 5002, "description": "Radar Scheduling Manager link." },
+    { "name": "CRM", "id": 4, "role": "PEER", "port": 5003, "description": "Correlation / Racking Manager link." }
+  ],
+  "header": {
+    "name": "MsgHeader",
+    "fields": [
+      { "name": "sender_id",   "type": "usize", "doc": "ModuleId of the sender." },
+      { "name": "receiver_id", "type": "usize", "doc": "ModuleId of the receiver." },
+      { "name": "msg_id",      "type": "usize", "doc": "Type discriminator, unique within a link." },
+      { "name": "timestamp",   "type": "usize", "doc": "Milliseconds. Drives the shared replay clock." },
+      { "name": "msg_length",  "type": "usize", "doc": "TOTAL bytes including this header. Authoritative for framing." }
+    ]
+  },
+  "structs": [
+    {
+      "name": "Detection",
+      "fields": [
+        { "name": "distance", "type": "f64", "unit": "m" },
+        { "name": "heading",  "type": "f64", "unit": "rad" }
+      ]
+    }
+  ],
+  "messages": [
+    {
+      "name": "DetectionReport",
+      "module": "RSP",
+      "msgId": 1,
+      "direction": "TO_DKM",
+      "doc": "Raw detections for one beam. beam_id must have been announced by an RSM BeamReport first -- a cross-link dependency the shared replay clock exists to preserve.",
+      "fields": [
+        { "name": "beam_id", "type": "usize" },
+        { "name": "detection_timestamp", "type": "usize", "unit": "ms" },
+        { "name": "detection_count", "type": "usize", "doc": "Number of live entries in detections[]." },
+        {
+          "name": "detections",
+          "type": "Detection",
+          "array": { "length": 8, "lengthConstant": "MAXIMUM_DETECTIONS_PER_BEAM", "countField": "detection_count" }
+        }
+      ]
+    },
+    {
+      "name": "JammerReport",
+      "module": "RSP",
+      "msgId": 2,
+      "direction": "TO_DKM",
+      "fields": [
+        { "name": "beam_id", "type": "usize" },
+        { "name": "jammer_timestamp", "type": "usize", "unit": "ms" }
+      ]
+    },
+    {
+      "name": "BeamReport",
+      "module": "RSM",
+      "msgId": 1,
+      "direction": "TO_DKM",
+      "doc": "Announces a beam. beam_type 1 selects closest-to-average detection reduction; anything else averages.",
+      "fields": [
+        { "name": "beam_id", "type": "usize" },
+        { "name": "beam_timestamp", "type": "usize", "unit": "ms" },
+        { "name": "beam_type", "type": "usize", "enumValues": { "0": "AVERAGE", "1": "CLOSEST_TO_AVERAGE" } },
+        { "name": "beam_heading", "type": "f64", "unit": "rad" }
+      ]
+    },
+    {
+      "name": "GateAreaMsg",
+      "module": "RSM",
+      "msgId": 2,
+      "direction": "TO_DKM",
+      "doc": "Polar exclusion region. A measurement falling inside ANY gate area is suppressed.",
+      "fields": [
+        { "name": "start_distance", "type": "f64", "unit": "m" },
+        { "name": "end_distance",   "type": "f64", "unit": "m" },
+        { "name": "start_heading",  "type": "f64", "unit": "rad" },
+        { "name": "end_heading",    "type": "f64", "unit": "rad" }
+      ]
+    },
+    {
+      "name": "ReportingAreaMsg",
+      "module": "RSM",
+      "msgId": 3,
+      "direction": "TO_DKM",
+      "doc": "Cartesian inclusion region. With at least one defined, a measurement must fall inside one of them.",
+      "fields": [
+        { "name": "start_x", "type": "f64", "unit": "m" },
+        { "name": "end_x",   "type": "f64", "unit": "m" },
+        { "name": "start_y", "type": "f64", "unit": "m" },
+        { "name": "end_y",   "type": "f64", "unit": "m" }
+      ]
+    },
+    {
+      "name": "ReadCommand",
+      "module": "RSM",
+      "msgId": 4,
+      "direction": "TO_DKM",
+      "doc": "Header-only message; exercises the zero-payload path.",
+      "fields": []
+    },
+    {
+      "name": "MeasurementReport",
+      "module": "RSM",
+      "msgId": 5,
+      "direction": "FROM_DKM",
+      "doc": "The DKM's reduced measurement for a DetectionReport that passed the gate/reporting-area checks.",
+      "fields": [
+        { "name": "measurement_timestamp", "type": "usize", "unit": "ms" },
+        { "name": "distance", "type": "f64", "unit": "m" },
+        { "name": "heading",  "type": "f64", "unit": "rad" }
+      ]
+    },
+    {
+      "name": "Prediction",
+      "module": "CRM",
+      "msgId": 1,
+      "direction": "TO_DKM",
+      "doc": "One observation of a tracked object. Repeated Predictions sharing track_id are the same object over time.",
+      "fields": [
+        { "name": "track_id", "type": "usize", "correlationId": true },
+        { "name": "distance", "type": "f64", "unit": "m" },
+        { "name": "heading",  "type": "f64", "unit": "rad" },
+        { "name": "pos_x",    "type": "f64", "unit": "m" },
+        { "name": "pos_y",    "type": "f64", "unit": "m" },
+        { "name": "vel_x",    "type": "f64", "unit": "m/s" },
+        { "name": "vel_y",    "type": "f64", "unit": "m/s" }
+      ]
+    }
+  ]
+}

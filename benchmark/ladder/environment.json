@@ -1,0 +1,10 @@
+{
+ "kernel": "6.10.14-linuxkit",
+ "machine": "aarch64",
+ "cpus": 10,
+ "cgroupMemoryMax": "8589934592",
+ "cgroupCpuMax": "800000 100000",
+ "loopbackMtu": "65536",
+ "cpuinfoFirstLine": "processor\t: 0",
+ "gatewayFlags": "-Xmx6g"
+}

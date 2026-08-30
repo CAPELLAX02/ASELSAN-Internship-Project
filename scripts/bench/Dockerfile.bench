@@ -1,0 +1,23 @@
+# Benchmark harness image.
+#
+# Gateway and load peer run in the SAME container on its own loopback. Splitting
+# them across two containers would put Docker's bridge and userland proxy in the
+# measurement path, and the report would then be describing that rather than the
+# gateway. One container also means one cgroup, so the CPU and memory limits the
+# run is pinned to are the limits the numbers belong to.
+#
+# The base is the Mandrel builder image: it carries a JDK for the harness itself
+# and the same UBI9 glibc the native binary was linked against, so nothing about
+# the runtime differs between "built" and "measured".
+FROM quay.io/quarkus/ubi9-quarkus-mandrel-builder-image:jdk-25
+
+USER root
+WORKDIR /bench
+
+COPY --chmod=0755 gateway-runner  /bench/gateway
+COPY Bench.java                   /bench/Bench.java
+COPY --chmod=0755 ladder-run.sh   /bench/ladder-run.sh
+COPY sample-proc.py               /bench/sample-proc.py
+
+ENV LANG=C.UTF-8
+ENTRYPOINT ["/bench/ladder-run.sh"]

@@ -1,0 +1,45 @@
+== ortam: 10 CPU, cgroup bellek 8589934592, lo MTU 65536
+
+== seviye 10000 msg/s, 30 s
+   48.64 MiB yazildi (299,290 mesaj, 48.64 MiB): /tmp/bench/level.bin
+     kayitli sure: 29.9 s, 10,000 mesaj/s
+   -- kosu 1/3
+   -- kosu 2/3
+   -- kosu 3/3
+
+== seviye 50000 msg/s, 30 s
+   243.19 MiB yazildi (1,496,470 mesaj, 243.19 MiB): /tmp/bench/level.bin
+     kayitli sure: 29.9 s, 50,000 mesaj/s
+   -- kosu 1/3
+   -- kosu 2/3
+   -- kosu 3/3
+
+== seviye 100000 msg/s, 30 s
+   486.37 MiB yazildi (2,992,950 mesaj, 486.37 MiB): /tmp/bench/level.bin
+     kayitli sure: 29.9 s, 100,000 mesaj/s
+   -- kosu 1/3
+   -- kosu 2/3
+   -- kosu 3/3
+
+== seviye 250000 msg/s, 30 s
+   1.19 GiB yazildi (7,482,390 mesaj, 1.19 GiB): /tmp/bench/level.bin
+     kayitli sure: 29.9 s, 250,000 mesaj/s
+   -- kosu 1/3
+   -- kosu 2/3
+   -- kosu 3/3
+
+== seviye 500000 msg/s, 16 s
+   1.27 GiB yazildi (7,981,220 mesaj, 1.27 GiB): /tmp/bench/level.bin
+     kayitli sure: 16.0 s, 500,000 mesaj/s
+   -- kosu 1/3
+   -- kosu 2/3
+   -- kosu 3/3
+
+== seviye 1000000 msg/s, 10 s
+   1.58 GiB yazildi (9,976,520 mesaj, 1.58 GiB): /tmp/bench/level.bin
+     kayitli sure: 10.0 s, 1,000,000 mesaj/s
+   -- kosu 1/3
+   -- kosu 2/3
+   -- kosu 3/3
+
+== bitti, ciktilar /out altinda

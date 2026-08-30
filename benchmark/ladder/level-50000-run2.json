@@ -1,0 +1,75 @@
+{
+ "offeredRate": 50000,
+ "run": 2,
+ "seconds": 30.0,
+ "peer": {
+  "seconds": 29.928772,
+  "bytes": 254998488,
+  "messages": 1496470,
+  "bytesPerSecond": 8520179,
+  "messagesPerSecond": 50001,
+  "jitterMicros": {
+   "p50": 15,
+   "p95": 78,
+   "p99": 182,
+   "p999": 8112,
+   "max": 23532,
+   "mean": 54.9,
+   "stdDev": 475.7,
+   "count": 1496470,
+   "rejected": 0
+  },
+  "lateMicros": {
+   "p50": 1879,
+   "p95": 13352,
+   "p99": 16864,
+   "p999": 22272,
+   "max": 23264,
+   "mean": 3432.3,
+   "stdDev": 4199.2,
+   "count": 10889,
+   "rejected": 0
+  },
+  "earlyMicros": {
+   "p50": 253,
+   "p95": 260,
+   "p99": 262,
+   "p999": 265,
+   "max": 268,
+   "mean": 239.8,
+   "stdDev": 26.6,
+   "count": 1485581,
+   "rejected": 0
+  },
+  "links": [
+   {
+    "link": "RSP",
+    "bytes": 229857792,
+    "messages": 1197176,
+    "deviationP99Micros": 263
+   },
+   {
+    "link": "RSM",
+    "bytes": 10774584,
+    "messages": 149647,
+    "deviationP99Micros": 254
+   },
+   {
+    "link": "CRM",
+    "bytes": 14366112,
+    "messages": 149647,
+    "deviationP99Micros": 247
+   }
+  ]
+ },
+ "gateway": {
+  "finalLagMillis": 0.0,
+  "writeStalls": 0,
+  "vizFramesSkipped": 0,
+  "vizSamplesDropped": 0,
+  "captureOverflowed": 0,
+  "eventsDropped": 0,
+  "cpuSeconds": 31.37,
+  "peakRssKb": 611980
+ }
+}

@@ -1,0 +1,5 @@
+# Quarkus CLI scratch, created when a project is generated from this directory.
+.quarkus/
+
+# macOS
+.DS_Store

@@ -1,0 +1,294 @@
+__  ____  __  _____   ___  __ ____  ______ 
+ --/ __ \/ / / / _ | / _ \/ //_/ / / / __/ 
+ -/ /_/ / /_/ / __ |/ , _/ ,< / /_/ /\ \   
+--\___\_\____/_/ |_/_/|_/_/|_|\____/___/   
+15:57:11.119 INFO  [co.as.dk.ga.sc.SchemaService] Interface schema 1.1.0 (3b01d5fddff0def5) compiled: 8 message type(s) across 3 peer link(s); header 40 bytes, size_t 8 bytes, little-endian
+15:57:11.120 DEBUG [co.as.dk.ga.sc.SchemaService]   RSP/DetectionReport          msg_id=1 size=192 TO_DKM
+15:57:11.120 DEBUG [co.as.dk.ga.sc.SchemaService]   RSP/JammerReport             msg_id=2 size=56 TO_DKM
+15:57:11.120 DEBUG [co.as.dk.ga.sc.SchemaService]   RSM/BeamReport               msg_id=1 size=72 TO_DKM
+15:57:11.120 DEBUG [co.as.dk.ga.sc.SchemaService]   RSM/GateAreaMsg              msg_id=2 size=72 TO_DKM
+15:57:11.120 DEBUG [co.as.dk.ga.sc.SchemaService]   RSM/ReportingAreaMsg         msg_id=3 size=72 TO_DKM
+15:57:11.120 DEBUG [co.as.dk.ga.sc.SchemaService]   RSM/ReadCommand              msg_id=4 size=40 TO_DKM
+15:57:11.120 DEBUG [co.as.dk.ga.sc.SchemaService]   RSM/MeasurementReport        msg_id=5 size=64 FROM_DKM
+15:57:11.120 DEBUG [co.as.dk.ga.sc.SchemaService]   CRM/Prediction               msg_id=1 size=96 TO_DKM
+15:57:11.121 INFO  [co.as.dk.ga.vi.VizCatalog] Visualization catalog 1.1.0 compiled: 8 mapping(s)
+15:57:11.122 INFO  [co.as.dk.ga.li.MessageLibrary] message library: 0 entr(ies) from ./data/library
+15:57:11.126 INFO  [co.as.dk.ga.vi.VizPublisher] visualization publisher started: 16 ms frames, 65536-sample rings, 4096 records/frame
+15:57:11.127 INFO  [co.as.dk.ga.ev.EventHub] [RSP] listening on 0.0.0.0:5001 -- start the DKM now; it connects once and does not retry
+15:57:11.127 INFO  [co.as.dk.ga.ev.EventHub] [RSM] listening on 0.0.0.0:5002 -- start the DKM now; it connects once and does not retry
+15:57:11.127 INFO  [co.as.dk.ga.ev.EventHub] [CRM] listening on 0.0.0.0:5003 -- start the DKM now; it connects once and does not retry
+15:57:11.127 INFO  [io.quarkus] dkm-gateway 1.0.0-SNAPSHOT native (powered by Quarkus 3.38.3) started in 0.027s. Listening on: http://127.0.0.1:8080
+15:57:11.127 INFO  [io.quarkus] Profile prod activated. 
+15:57:11.127 INFO  [io.quarkus] Installed features: [cdı, confıg-yaml, rest, rest-jackson, smallrye-context-propagatıon, smallrye-health, vertx, websockets-next]
+15:57:11.789 INFO  [co.as.dk.ga.ev.EventHub] [RSP] DKM connected from 127.0.0.1:33180
+15:57:11.792 INFO  [co.as.dk.ga.ev.EventHub] [RSM] DKM connected from 127.0.0.1:36848
+15:57:11.793 INFO  [co.as.dk.ga.ev.EventHub] [CRM] DKM connected from 127.0.0.1:37036
+[3.179s] GC(0) Using Serial GC
+[3.179s] GC(0)   Memory: 8192M
+[3.179s] GC(0)   GC policy: adaptive
+[3.179s] GC(0)   Maximum young generation size: 2048M
+[3.179s] GC(0)   Maximum heap size: 6144M
+[3.179s] GC(0)   Minimum heap size: 16M
+[3.179s] GC(0)   Aligned chunk size: 512K
+[3.179s] GC(0)   Large array threshold: 128K
+[3.179s] GC(0) Collect on allocation
+[3.213s] GC(0)   Eden: 48.35M->0.00M
+[3.213s] GC(0)   Survivor: 0.00M->0.00M
+[3.213s] GC(0)   Old: 0.00M->33.18M
+[3.213s] GC(0)   Free: 0.00M->33.50M
+[3.213s] GC(0) Pause Full GC (Collect on allocation) 48.35M->33.18M 33.373ms
+[3.241s] GC(1) Collect on allocation
+[3.295s] GC(1)   Eden: 48.30M->0.00M
+[3.295s] GC(1)   Survivor: 0.00M->0.00M
+[3.295s] GC(1)   Old: 33.18M->67.11M
+[3.295s] GC(1)   Free: 0.00M->31.50M
+[3.295s] GC(1) Pause Full GC (Collect on allocation) 81.48M->67.11M 53.343ms
+[3.331s] GC(2) Collect on allocation
+[3.361s] GC(2)   Eden: 56.77M->0.00M
+[3.361s] GC(2)   Survivor: 0.00M->8.00M
+[3.361s] GC(2)   Old: 67.11M->106.89M
+[3.361s] GC(2)   Free: 0.00M->45.50M
+[3.361s] GC(2) Pause Incremental GC (Collect on allocation) 123.89M->114.89M 29.462ms
+[3.402s] GC(3) Collect on allocation
+[3.513s] GC(3)   Eden: 60.91M->0.00M
+[3.513s] GC(3)   Survivor: 8.00M->0.00M
+[3.513s] GC(3)   Old: 106.89M->151.84M
+[3.513s] GC(3)   Free: 0.00M->50.00M
+[3.513s] GC(3) Pause Full GC (Collect on allocation) 175.80M->151.84M 110.455ms
+[3.557s] GC(4) Collect on allocation
+[3.580s] GC(4)   Eden: 79.36M->0.00M
+[3.580s] GC(4)   Survivor: 0.00M->8.00M
+[3.580s] GC(4)   Old: 151.84M->212.21M
+[3.580s] GC(4)   Free: 0.00M->58.50M
+[3.580s] GC(4) Pause Incremental GC (Collect on allocation) 231.21M->220.21M 22.649ms
+[3.633s] GC(5) Collect on allocation
+[3.805s] GC(5)   Eden: 73.00M->0.00M
+[3.805s] GC(5)   Survivor: 8.00M->0.00M
+[3.805s] GC(5)   Old: 212.21M->265.30M
+[3.805s] GC(5)   Free: 0.00M->61.00M
+[3.805s] GC(5) Pause Full GC (Collect on allocation) 293.21M->265.30M 171.834ms
+[3.847s] GC(6) Collect on allocation
+[3.862s] GC(6)   Eden: 70.29M->0.00M
+[3.862s] GC(6)   Survivor: 0.00M->63.29M
+[3.862s] GC(6)   Old: 265.30M->265.30M
+[3.862s] GC(6)   Free: 22.00M->39.00M
+[3.862s] GC(6) Pause Incremental GC (Collect on allocation) 335.60M->328.60M 14.716ms
+[3.926s] GC(7) Collect on allocation
+[3.963s] GC(7)   Eden: 69.00M->0.00M
+[3.963s] GC(7)   Survivor: 63.29M->83.79M
+[3.963s] GC(7)   Old: 265.30M->300.80M
+[3.963s] GC(7)   Free: 0.00M->101.00M
+[3.963s] GC(7) Pause Incremental GC (Collect on allocation) 397.60M->384.60M 36.913ms
+[4.032s] GC(8) Collect on allocation
+[4.079s] GC(8)   Eden: 68.00M->0.00M
+[4.079s] GC(8)   Survivor: 83.79M->109.79M
+[4.079s] GC(8)   Old: 300.80M->329.80M
+[4.079s] GC(8)   Free: 33.00M->120.50M
+[4.079s] GC(8) Pause Incremental GC (Collect on allocation) 452.60M->439.60M 47.068ms
+[4.131s] GC(9) Collect on allocation
+[4.436s] GC(9)   Eden: 77.94M->0.00M
+[4.436s] GC(9)   Survivor: 109.79M->0.00M
+[4.436s] GC(9)   Old: 329.80M->490.18M
+[4.436s] GC(9)   Free: 89.50M->46.00M
+[4.436s] GC(9) Pause Full GC (Collect on allocation) 517.54M->490.18M 305.781ms
+[4.509s] GC(10) Collect on allocation
+[4.555s] GC(10)   Eden: 65.00M->0.00M
+[4.555s] GC(10)   Survivor: 0.00M->53.00M
+[4.555s] GC(10)   Old: 490.18M->490.18M
+[4.555s] GC(10)   Free: 0.00M->65.00M
+[4.555s] GC(10) Pause Incremental GC (Collect on allocation) 555.18M->543.18M 46.170ms
+[4.642s] GC(11) Collect on allocation
+[4.683s] GC(11)   Eden: 64.00M->0.00M
+[4.683s] GC(11)   Survivor: 53.00M->105.00M
+[4.683s] GC(11)   Old: 490.18M->490.18M
+[4.683s] GC(11)   Free: 1.00M->117.00M
+[4.683s] GC(11) Pause Incremental GC (Collect on allocation) 607.18M->595.18M 41.327ms
+[4.772s] GC(12) Collect on allocation
+[4.828s] GC(12)   Eden: 63.00M->0.00M
+[4.828s] GC(12)   Survivor: 105.00M->148.50M
+[4.828s] GC(12)   Old: 490.18M->498.18M
+[4.828s] GC(12)   Free: 54.00M->168.00M
+[4.828s] GC(12) Pause Incremental GC (Collect on allocation) 658.18M->646.68M 56.045ms
+[4.918s] GC(13) Collect on allocation
+[5.416s] GC(13)   Eden: 129.92M->0.00M
+[5.416s] GC(13)   Survivor: 148.50M->0.00M
+[5.416s] GC(13)   Old: 498.18M->733.80M
+[5.416s] GC(13)   Free: 108.50M->53.00M
+[5.416s] GC(13) Pause Full GC (Collect on allocation) 776.60M->733.80M 498.169ms
+[5.490s] GC(14) Collect on allocation
+[5.521s] GC(14)   Eden: 60.00M->0.00M
+[5.521s] GC(14)   Survivor: 0.00M->49.00M
+[5.521s] GC(14)   Old: 733.80M->733.80M
+[5.521s] GC(14)   Free: 0.00M->60.00M
+[5.521s] GC(14) Pause Incremental GC (Collect on allocation) 793.80M->782.80M 31.297ms
+[5.586s] GC(15) Collect on allocation
+[5.656s] GC(15)   Eden: 59.00M->0.00M
+[5.656s] GC(15)   Survivor: 49.00M->97.00M
+[5.656s] GC(15)   Old: 733.80M->733.80M
+[5.656s] GC(15)   Free: 1.00M->108.00M
+[5.656s] GC(15) Pause Incremental GC (Collect on allocation) 841.80M->830.80M 70.513ms
+[5.726s] GC(16) Collect on allocation
+[5.767s] GC(16)   Eden: 58.00M->0.00M
+[5.767s] GC(16)   Survivor: 97.00M->144.50M
+[5.767s] GC(16)   Old: 733.80M->733.80M
+[5.767s] GC(16)   Free: 50.00M->155.00M
+[5.767s] GC(16) Pause Incremental GC (Collect on allocation) 888.80M->878.30M 41.102ms
+15:57:16.913 INFO  [co.as.dk.ga.ev.EventHub] [session] loaded 7981220 message(s) from level.bin (1359999888 bytes)
+15:57:16.949 INFO  [co.as.dk.ga.ev.EventHub] [playback] pacing mode set to TIMESTAMP
+15:57:16.953 INFO  [co.as.dk.ga.ev.EventHub] [playback] speed set to 1.0x
+[5.938s] GC(17) Collect on allocation
+[6.005s] GC(17)   Eden: 60.54M->0.00M
+[6.005s] GC(17)   Survivor: 144.50M->188.12M
+[6.005s] GC(17)   Old: 733.80M->733.80M
+[6.005s] GC(17)   Free: 106.50M->193.00M
+[6.005s] GC(17) Pause Incremental GC (Collect on allocation) 938.84M->921.92M 67.585ms
+[6.049s] GC(18) Collect on allocation
+[6.124s] GC(18)   Eden: 82.02M->0.00M
+[6.124s] GC(18)   Survivor: 188.12M->215.79M
+[6.124s] GC(18)   Old: 733.80M->733.80M
+[6.124s] GC(18)   Free: 192.50M->192.50M
+[6.124s] GC(18) Pause Incremental GC (Collect on allocation) 1003.95M->949.60M 75.245ms
+[6.171s] GC(19) Collect on allocation
+[6.261s] GC(19)   Eden: 117.86M->0.00M
+[6.261s] GC(19)   Survivor: 215.79M->206.42M
+[6.261s] GC(19)   Old: 733.80M->782.30M
+[6.261s] GC(19)   Free: 192.00M->192.50M
+[6.261s] GC(19) Pause Incremental GC (Collect on allocation) 1067.46M->988.72M 89.790ms
+[6.299s] GC(20) Collect on allocation
+[7.330s] GC(20)   Eden: 97.92M->0.00M
+[7.330s] GC(20)   Survivor: 206.42M->0.00M
+[7.330s] GC(20)   Old: 782.30M->1036.95M
+[7.330s] GC(20)   Free: 192.00M->39.00M
+[7.330s] GC(20) Pause Full GC (Collect on allocation) 1086.65M->1036.95M 1031.019ms
+[7.407s] GC(21) Collect on allocation
+[7.428s] GC(21)   Eden: 73.52M->0.00M
+[7.428s] GC(21)   Survivor: 0.00M->61.48M
+[7.428s] GC(21)   Old: 1036.95M->1036.95M
+[7.428s] GC(21)   Free: 38.50M->38.50M
+[7.428s] GC(21) Pause Incremental GC (Collect on allocation) 1110.48M->1098.43M 20.509ms
+15:57:18.596 INFO  [co.as.dk.ga.ev.EventHub] [playback] started: 7981220 message(s), 1359999888 bytes, spanning 15962 ms of recorded time at 1.0x (TIMESTAMP)
+[7.701s] GC(22) Collect on allocation
+[7.729s] GC(22)   Eden: 75.17M->0.00M
+[7.729s] GC(22)   Survivor: 61.48M->86.74M
+[7.729s] GC(22)   Old: 1036.95M->1036.95M
+[7.729s] GC(22)   Free: 12.00M->37.50M
+[7.729s] GC(22) Pause Incremental GC (Collect on allocation) 1173.61M->1123.70M 28.192ms
+[8.343s] GC(23) Collect on allocation
+[8.372s] GC(23)   Eden: 78.50M->0.00M
+[8.372s] GC(23)   Survivor: 86.74M->87.24M
+[8.372s] GC(23)   Old: 1036.95M->1036.95M
+[8.372s] GC(23)   Free: 0.00M->68.50M
+[8.372s] GC(23) Pause Incremental GC (Collect on allocation) 1202.20M->1124.20M 28.700ms
+[9.011s] GC(24) Collect on allocation
+[9.088s] GC(24)   Eden: 81.50M->0.00M
+[9.088s] GC(24)   Survivor: 87.24M->87.24M
+[9.088s] GC(24)   Old: 1036.95M->1036.95M
+[9.088s] GC(24)   Free: 0.00M->73.50M
+[9.088s] GC(24) Pause Incremental GC (Collect on allocation) 1205.70M->1124.20M 76.616ms
+[9.715s] GC(25) Collect on allocation
+[9.745s] GC(25)   Eden: 84.50M->0.00M
+[9.745s] GC(25)   Survivor: 87.24M->87.74M
+[9.745s] GC(25)   Old: 1036.95M->1036.95M
+[9.745s] GC(25)   Free: 0.00M->78.50M
+[9.745s] GC(25) Pause Incremental GC (Collect on allocation) 1208.70M->1124.70M 30.079ms
+[10.432s] GC(26) Collect on allocation
+[10.459s] GC(26)   Eden: 87.00M->0.00M
+[10.459s] GC(26)   Survivor: 87.74M->88.24M
+[10.459s] GC(26)   Old: 1036.95M->1036.95M
+[10.459s] GC(26)   Free: 0.00M->82.50M
+[10.459s] GC(26) Pause Incremental GC (Collect on allocation) 1211.70M->1125.20M 26.688ms
+[11.169s] GC(27) Collect on allocation
+[11.195s] GC(27)   Eden: 89.50M->0.00M
+[11.195s] GC(27)   Survivor: 88.24M->88.74M
+[11.195s] GC(27)   Old: 1036.95M->1036.95M
+[11.195s] GC(27)   Free: 0.00M->86.50M
+[11.195s] GC(27) Pause Incremental GC (Collect on allocation) 1214.70M->1125.70M 25.668ms
+[11.921s] GC(28) Collect on allocation
+[11.964s] GC(28)   Eden: 91.50M->0.00M
+[11.964s] GC(28)   Survivor: 88.74M->89.24M
+[11.964s] GC(28)   Old: 1036.95M->1036.95M
+[11.964s] GC(28)   Free: 0.00M->89.50M
+[11.964s] GC(28) Pause Incremental GC (Collect on allocation) 1217.20M->1126.20M 42.078ms
+[12.692s] GC(29) Collect on allocation
+[12.725s] GC(29)   Eden: 93.50M->0.00M
+[12.725s] GC(29)   Survivor: 89.24M->89.74M
+[12.725s] GC(29)   Old: 1036.95M->1036.95M
+[12.725s] GC(29)   Free: 0.00M->93.00M
+[12.725s] GC(29) Pause Incremental GC (Collect on allocation) 1219.70M->1126.70M 32.427ms
+[13.486s] GC(30) Collect on allocation
+[13.511s] GC(30)   Eden: 95.50M->0.00M
+[13.511s] GC(30)   Survivor: 89.74M->90.24M
+[13.511s] GC(30)   Old: 1036.95M->1036.95M
+[13.511s] GC(30)   Free: 0.00M->96.00M
+[13.511s] GC(30) Pause Incremental GC (Collect on allocation) 1222.20M->1127.20M 24.625ms
+[14.288s] GC(31) Collect on allocation
+[14.313s] GC(31)   Eden: 97.00M->0.00M
+[14.313s] GC(31)   Survivor: 90.24M->90.74M
+[14.313s] GC(31)   Old: 1036.95M->1036.95M
+[14.313s] GC(31)   Free: 0.00M->98.50M
+[14.313s] GC(31) Pause Incremental GC (Collect on allocation) 1224.20M->1127.70M 24.604ms
+[15.100s] GC(32) Collect on allocation
+[15.125s] GC(32)   Eden: 98.50M->0.00M
+[15.125s] GC(32)   Survivor: 90.74M->91.24M
+[15.125s] GC(32)   Old: 1036.95M->1036.95M
+[15.125s] GC(32)   Free: 0.00M->101.00M
+[15.125s] GC(32) Pause Incremental GC (Collect on allocation) 1226.20M->1128.20M 24.703ms
+[15.925s] GC(33) Collect on allocation
+[15.958s] GC(33)   Eden: 100.00M->0.00M
+[15.958s] GC(33)   Survivor: 91.24M->91.74M
+[15.958s] GC(33)   Old: 1036.95M->1036.95M
+[15.958s] GC(33)   Free: 1.00M->103.50M
+[15.958s] GC(33) Pause Incremental GC (Collect on allocation) 1228.20M->1128.70M 32.464ms
+[16.762s] GC(34) Collect on allocation
+[16.789s] GC(34)   Eden: 101.50M->0.00M
+[16.789s] GC(34)   Survivor: 91.74M->92.24M
+[16.789s] GC(34)   Old: 1036.95M->1036.95M
+[16.789s] GC(34)   Free: 2.00M->105.50M
+[16.789s] GC(34) Pause Incremental GC (Collect on allocation) 1230.20M->1129.20M 27.133ms
+[17.616s] GC(35) Collect on allocation
+[17.647s] GC(35)   Eden: 103.00M->0.00M
+[17.647s] GC(35)   Survivor: 92.24M->92.74M
+[17.647s] GC(35)   Old: 1036.95M->1036.95M
+[17.647s] GC(35)   Free: 2.50M->107.50M
+[17.647s] GC(35) Pause Incremental GC (Collect on allocation) 1232.20M->1129.70M 30.438ms
+[18.478s] GC(36) Collect on allocation
+[18.511s] GC(36)   Eden: 104.00M->0.00M
+[18.511s] GC(36)   Survivor: 92.74M->37.44M
+[18.511s] GC(36)   Old: 1036.95M->1091.75M
+[18.511s] GC(36)   Free: 3.50M->78.50M
+[18.511s] GC(36) Pause Incremental GC (Collect on allocation) 1233.70M->1129.20M 32.831ms
+[19.346s] GC(37) Collect on allocation
+[19.360s] GC(37)   Eden: 105.00M->0.00M
+[19.360s] GC(37)   Survivor: 37.44M->7.00M
+[19.360s] GC(37)   Old: 1091.75M->1122.70M
+[19.360s] GC(37)   Free: 0.00M->69.00M
+[19.360s] GC(37) Pause Incremental GC (Collect on allocation) 1234.20M->1129.70M 13.882ms
+[20.219s] GC(38) Collect on allocation
+[20.222s] GC(38)   Eden: 106.00M->0.00M
+[20.222s] GC(38)   Survivor: 7.00M->7.00M
+[20.222s] GC(38)   Old: 1122.70M->1123.20M
+[20.222s] GC(38)   Free: 0.00M->81.00M
+[20.222s] GC(38) Pause Incremental GC (Collect on allocation) 1235.70M->1130.20M 2.975ms
+[21.105s] GC(39) Collect on allocation
+[21.107s] GC(39)   Eden: 107.00M->0.00M
+[21.107s] GC(39)   Survivor: 7.00M->7.00M
+[21.107s] GC(39)   Old: 1123.20M->1123.20M
+[21.107s] GC(39)   Free: 0.00M->90.00M
+[21.107s] GC(39) Pause Incremental GC (Collect on allocation) 1237.20M->1130.20M 2.200ms
+[22.000s] GC(40) Collect on allocation
+[22.003s] GC(40)   Eden: 108.00M->0.00M
+[22.003s] GC(40)   Survivor: 7.00M->7.00M
+[22.003s] GC(40)   Old: 1123.20M->1123.20M
+[22.003s] GC(40)   Free: 0.00M->96.50M
+[22.003s] GC(40) Pause Incremental GC (Collect on allocation) 1238.20M->1130.20M 2.489ms
+[22.895s] GC(41) Collect on allocation
+[22.898s] GC(41)   Eden: 108.50M->0.00M
+[22.898s] GC(41)   Survivor: 7.00M->6.50M
+[22.898s] GC(41)   Old: 1123.20M->1123.70M
+[22.898s] GC(41)   Free: 0.00M->101.50M
+[22.898s] GC(41) Pause Incremental GC (Collect on allocation) 1238.70M->1130.20M 2.204ms
+15:57:34.558 INFO  [co.as.dk.ga.ev.EventHub] [playback] replay finished: 7981220 message(s), 1359999888 bytes
+15:57:42.197 WARN  [co.as.dk.ga.ev.EventHub] [CRM] DKM disconnected
+15:57:42.197 WARN  [co.as.dk.ga.ev.EventHub] [RSM] DKM disconnected
+15:57:42.198 WARN  [co.as.dk.ga.ev.EventHub] [RSP] DKM disconnected
+15:57:42.226 INFO  [io.quarkus] dkm-gateway stopped in 0.028s

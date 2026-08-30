@@ -1,0 +1,116 @@
+quarkus:
+  application:
+    name: dkm-gateway
+  http:
+    port: 8080
+    # The console is served from Vite in development and from anywhere in
+    # production, so the browser needs to be allowed to reach this origin.
+    cors:
+      # `enabled`, not the bare `quarkus.http.cors` boolean -- that older form is
+      # no longer recognised and is silently ignored, which leaves CORS off. It
+      # goes unnoticed in development because Vite proxies /api and /ws through
+      # its own origin; it only bites when the console is served from elsewhere.
+      enabled: true
+      origins: "http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173"
+      methods: "GET,POST,PUT,DELETE,OPTIONS"
+      headers: "content-type,accept"
+    limits:
+      # Input binaries are uploaded whole. Anything genuinely large should go in
+      # through /api/session/load-path instead, which never touches HTTP at all.
+      max-body-size: 512M
+  websockets-next:
+    server:
+      # One visualization frame is at most maxRecordsPerFrame * 48 + 24 bytes.
+      max-message-size: 4194304
+  log:
+    category:
+      "com.aselsan.dkm":
+        level: DEBUG
+    console:
+      format: "%d{HH:mm:ss.SSS} %-5p [%c{2.}] %s%e%n"
+  native:
+    # The wire codec, the arenas and the visualization rings are all direct
+    # buffers; the native image needs to be allowed the same off-heap room the
+    # JVM build takes.
+    additional-build-args: "-J-Xmx6g"
+    resources:
+      # The schema and the visualization catalog are read through the class
+      # loader at startup. GraalVM embeds no classpath resource it cannot see
+      # being used, and a reflective load is invisible to it -- without this the
+      # JVM build works perfectly and the native binary dies on the first line
+      # of SchemaService. SmokeIT exists so that cannot happen again quietly.
+      includes: "interface/*.json"
+
+dkm:
+  # Where the message library and any local state live.
+  data-dir: ./data
+
+  wire:
+    # Properties of the machine the DKM runs on, not of the message definitions.
+    # A 32-bit or big-endian target changes every offset in every message, and
+    # that has to be a config flip rather than a schema rewrite.
+    size-t-bytes: 8
+    byte-order: LITTLE_ENDIAN
+
+  links:
+    host: 0.0.0.0
+    # Ports default to the schema's own values (RSP 5001, RSM 5002, CRM 5003),
+    # matching mock_r/main.cpp. Override per module here:
+    # port:
+    #   RSP: 5001
+    write-queue-max-bytes: 16777216
+    send-buffer-bytes: 4194304
+    receive-buffer-bytes: 1048576
+    max-message-bytes: 16777216
+
+  playback:
+    max-batch-bytes: 262144
+    max-batch-messages: 4096
+    spin-threshold-nanos: 2000000
+    drain-timeout-millis: 5000
+    progress-interval-millis: 100
+
+  session:
+    # Load a stimulus file at startup instead of opening one in the UI. Off by
+    # default: FR-6 puts the choice of stimulus in the operator's hands, and
+    # this never presses Start for them either (FR-11) -- it only fills the
+    # working set, so a demo or a CI run can begin from a known state.
+    #   preload: ../samples/radar-demo-180s.in.bin
+
+  capture:
+    max-messages: 2000000
+    publish-interval-millis: 100
+    max-published-per-batch: 200
+    # Uncomment to mirror everything the DKM sends to a file as it arrives,
+    # the way mock_r's own MessageRecorder does:
+    # record-path: ./data/output.bin
+
+  viz:
+    frame-interval-millis: 16
+    ring-capacity: 65536
+    max-records-per-frame: 4096
+    stimulus-budget-per-frame: 2048
+    max-in-flight-frames: 4
+
+  telemetry:
+    interval-millis: 500
+
+"%dev":
+  quarkus:
+    log:
+      category:
+        "com.aselsan.dkm":
+          level: DEBUG
+
+"%test":
+  quarkus:
+    http:
+      test-port: 0
+  dkm:
+    links:
+      host: 127.0.0.1
+      port:
+        RSP: 15001
+        RSM: 15002
+        CRM: 15003
+    data-dir: ./target/test-data

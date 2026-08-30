@@ -1,0 +1,8 @@
+== ortam: 10 CPU, cgroup bellek 8589934592, lo MTU 65536
+
+== seviye 500000 msg/s, 16 s
+   1.27 GiB yazildi (7,981,220 mesaj, 1.27 GiB): /tmp/bench/level.bin
+     kayitli sure: 16.0 s, 500,000 mesaj/s
+   -- kosu 1/1
+
+== bitti, ciktilar /out altinda
