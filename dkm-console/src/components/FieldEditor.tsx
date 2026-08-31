@@ -72,7 +72,7 @@ function FieldRow({ schema, field, path, value, siblings, readOnly, onChange, t,
 
     if (field.kind === 'STRUCT' && field.struct) {
         return (
-            <fieldset className="border border-ink-700 rounded p-2">
+            <fieldset className="border border-ink-700  p-2">
                 <legend className="px-1 text-ink-400">{field.name}<TypeTag field={field} /></legend>
                 <div className="flex flex-col gap-2">
                     {field.struct.fields.map((child) => (
@@ -133,7 +133,7 @@ function ArrayField({ schema, field, path, value, siblings, readOnly, onChange, 
     }
 
     return (
-        <fieldset className="border border-ink-700 rounded p-2">
+        <fieldset className="border border-ink-700  p-2">
             <legend className="px-1 text-ink-400 flex items-center gap-2">
                 <span>{field.name}</span>
                 <TypeTag field={field} />
@@ -156,7 +156,7 @@ function ArrayField({ schema, field, path, value, siblings, readOnly, onChange, 
                     return (
                         <div
                             key={index}
-                            className={`flex items-start gap-2 rounded px-1.5 py-1 ${inactive ? 'opacity-35 bg-ink-950/60' : 'bg-ink-850/60'
+                            className={`flex items-start gap-2  px-1.5 py-1 ${inactive ? 'opacity-35 bg-ink-950/60' : 'bg-ink-850/60'
                                 }`}
                             title={inactive
                                 ? t('field.inactiveSlot', { count: field.countField ?? live })

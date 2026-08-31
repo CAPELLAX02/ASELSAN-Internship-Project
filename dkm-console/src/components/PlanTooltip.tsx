@@ -78,7 +78,7 @@ export function PlanTooltip({ target, bounds }: {
 
     return (
         <div
-            className="absolute z-20 pointer-events-none rounded-md border border-ink-600
+            className="absolute z-20 pointer-events-none  border border-ink-600
                  bg-ink-900/97 shadow-xl backdrop-blur-sm px-2.5 py-2"
             style={{
                 width: WIDTH,
@@ -87,7 +87,7 @@ export function PlanTooltip({ target, bounds }: {
             }}
         >
             <div className="flex items-center gap-1.5 pb-1.5 mb-1.5 border-b border-ink-700">
-                <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: target.color }} />
+                <span className="w-2 h-2  shrink-0" style={{ background: target.color }} />
                 <span className="text-ink-100 font-semibold truncate">{title}</span>
             </div>
 

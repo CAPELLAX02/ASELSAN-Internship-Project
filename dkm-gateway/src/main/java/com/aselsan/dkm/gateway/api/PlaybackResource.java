@@ -30,8 +30,8 @@ public class PlaybackResource {
 
     @POST
     @Path("/start")
-    public ObjectNode start() {
-        engine.start();
+    public ObjectNode start(@QueryParam("from") @DefaultValue("0") long fromMessageId) {
+        engine.start(fromMessageId);
         return engine.snapshot();
     }
 

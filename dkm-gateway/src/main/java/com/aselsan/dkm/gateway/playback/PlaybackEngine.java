@@ -128,6 +128,16 @@ public class PlaybackEngine {
     // ---- control (FR-11, FR-12) -----------------------------------------
 
     public synchronized void start() {
+        start(0);
+    }
+
+    /**
+     * Starts a run, optionally from a chosen message rather than the first
+     * (FR-11). Everything before it is marked as already sent, which is the
+     * same state a partially-completed run leaves behind -- so pausing,
+     * editing and resuming all behave exactly as they do mid-run.
+     */
+    public synchronized void start(long fromMessageId) {
         if (state == PlaybackState.RUNNING) {
             return;
         }
@@ -135,7 +145,7 @@ public class PlaybackEngine {
             resume();
             return;
         }
-        session.resetSentMarkers();
+        session.resetSentMarkers(fromMessageId);
         sentCounter.set(0);
         sentBytes.set(0);
         lastVirtualMillis = 0;

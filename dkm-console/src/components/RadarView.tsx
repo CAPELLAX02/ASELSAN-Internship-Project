@@ -68,7 +68,11 @@ export function RadarView() {
     const pointerRef = useRef<{ x: number; y: number } | null>(null)
     const colorsRef = useRef<Map<string, string>>(new Map())
     const [glError, setGlError] = useState<string | null>(null)
-    const [frozen, setFrozen] = useState(false)
+    // Freezing lives in the store because two things outside this view ask for
+    // it: pressing Stop, and a run reaching its last message. Both are moments
+    // the operator wants the picture held still, and neither is visible here.
+    const frozen = useStore((s) => s.vizFrozen)
+    const setVizFrozen = useStore((s) => s.setVizFrozen)
     /**
      * The clock the picture ages by, which is not the wall clock.
      *
@@ -86,16 +90,18 @@ export function RadarView() {
         const clock = clockRef.current
         return clock.stoppedAt ?? performance.now() - clock.offset
     }, [])
-    const toggleFrozen = () => {
+    // The clock follows the flag rather than the other way round, so a freeze
+    // asked for by the transport bar and one asked for by the button below end
+    // in exactly the same state.
+    useEffect(() => {
         const clock = clockRef.current
-        if (clock.stoppedAt === null) {
+        if (frozen && clock.stoppedAt === null) {
             clock.stoppedAt = performance.now() - clock.offset
-        } else {
+        } else if (!frozen && clock.stoppedAt !== null) {
             clock.offset = performance.now() - clock.stoppedAt
             clock.stoppedAt = null
         }
-        setFrozen(clock.stoppedAt !== null)
-    }
+    }, [frozen])
 
     // Re-run on a theme change too: the catalog's colours are tuned for a dark
     // ground and have to be deepened for a pale one.
@@ -344,7 +350,7 @@ export function RadarView() {
                     </button>
                     <button
                         className={`btn text-micro py-0.5 ${frozen ? 'btn-primary' : ''}`}
-                        onClick={toggleFrozen}
+                        onClick={() => setVizFrozen(!frozen)}
                         title={t('viz.freezeTitle')}
                     >
                         {frozen ? t('viz.frozen') : t('viz.live')}
@@ -420,7 +426,7 @@ export function RadarView() {
             <div className="absolute right-3 bottom-3 flex flex-col items-end gap-0.5 text-mini">
                 {legend.map((entry) => (
                     <span key={entry.type} className="flex items-center gap-1.5 text-ink-300" title={entry.note ?? entry.type}>
-                        <span className="w-2 h-2 rounded-sm" style={{ background: entry.color }} />
+                        <span className="w-2 h-2 " style={{ background: entry.color }} />
                         {entry.label}
                         <span className="text-ink-500">{entry.kindLabel}</span>
                     </span>

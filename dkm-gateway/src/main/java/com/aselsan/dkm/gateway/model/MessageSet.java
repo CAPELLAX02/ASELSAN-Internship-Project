@@ -52,6 +52,11 @@ public final class MessageSet implements AutoCloseable {
         return arena;
     }
 
+    /** Whether anything has been edited, inserted, removed or reordered since the load. */
+    public boolean isDirty() {
+        return dirty;
+    }
+
     public String sourceName() {
         return sourceName;
     }
@@ -189,6 +194,30 @@ public final class MessageSet implements AutoCloseable {
             }
         }
         return false;
+    }
+
+    /**
+     * Moves one message to a different position in the list.
+     *
+     * <p>Only the order changes. Each message keeps its own recorded timestamp,
+     * because that timestamp is what the DKM will see and reordering the list is
+     * not a claim about when anything happened -- the operator reorders to
+     * change what goes out first, then retimes if the timing matters too.
+     *
+     * @return the index it ended up at, or -1 if there is no such message
+     */
+    public int move(long id, int toIndex) {
+        for (int i = 0; i < entries.size(); i++) {
+            if (entries.get(i).id != id) {
+                continue;
+            }
+            MessageEntry entry = entries.remove(i);
+            int at = Math.min(Math.max(toIndex, 0), entries.size());
+            entries.add(at, entry);
+            dirty = true;
+            return at;
+        }
+        return -1;
     }
 
     /**

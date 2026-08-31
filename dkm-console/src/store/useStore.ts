@@ -102,6 +102,23 @@ interface State {
 
     notice: Notice | null
 
+    /**
+     * How many gateway actions are in flight. A count rather than a flag: two
+     * overlapping requests must not have the first one to finish declare the
+     * interface idle while the second is still running.
+     */
+    pending: number
+
+    /**
+     * Whether the plan view is holding its picture still.
+     *
+     * <p>Lives here rather than inside the view because two things outside it
+     * freeze it: pressing Stop, and a run reaching its last message. Both are
+     * moments the operator will want to read the final picture, and neither is
+     * something the canvas can see for itself.
+     */
+    vizFrozen: boolean
+
     setLang: (lang: Lang) => void
     setTheme: (theme: ThemeChoice) => void
     openTour: () => void
@@ -114,6 +131,7 @@ interface State {
     refreshPlayback: () => Promise<void>
     refreshLinks: () => Promise<void>
     touchSession: () => void
+    setVizFrozen: (frozen: boolean) => void
     run: <T>(action: () => Promise<T>, describe?: string) => Promise<T | undefined>
 }
 
@@ -153,6 +171,8 @@ export const useStore = create<State>((set, get) => ({
     captureOverflowed: 0,
 
     notice: null,
+    pending: 0,
+    vizFrozen: false,
 
     setLang(lang) {
         writeStored(STORAGE.lang, lang)
@@ -241,13 +261,20 @@ export const useStore = create<State>((set, get) => ({
     },
 
     async run(action, describe) {
+        set((state) => ({ pending: state.pending + 1 }))
         try {
             return await action()
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error)
             get().notify('ERROR', describe ? `${describe}: ${message}` : message)
             return undefined
+        } finally {
+            set((state) => ({ pending: Math.max(0, state.pending - 1) }))
         }
+    },
+
+    setVizFrozen(frozen) {
+        set({ vizFrozen: frozen })
     },
 }))
 

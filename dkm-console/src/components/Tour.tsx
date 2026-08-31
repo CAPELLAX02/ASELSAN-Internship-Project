@@ -149,7 +149,7 @@ export function Tour() {
 
             {rect && (
                 <div
-                    className="absolute rounded-md pointer-events-none border-2 border-signal"
+                    className="absolute  pointer-events-none border-2 border-signal"
                     style={{
                         top: rect.top, left: rect.left, width: rect.width, height: rect.height,
                         boxShadow: '0 0 0 1px color-mix(in srgb, var(--c-signal) 35%, transparent),'
@@ -162,7 +162,7 @@ export function Tour() {
             <div
                 ref={cardRef}
                 tabIndex={-1}
-                className="absolute rounded-lg border border-ink-600 bg-ink-900 shadow-2xl p-4
+                className="absolute  border border-ink-600 bg-ink-900 shadow-2xl p-4
                    focus:outline-none"
                 style={{
                     width: Math.min(CARD_WIDTH, vw - MARGIN * 2),
@@ -179,7 +179,7 @@ export function Tour() {
                         {STEPS.map((_, i) => (
                             <span
                                 key={i}
-                                className={`h-1 rounded-full ${i === index ? 'w-5 bg-signal' : 'w-1.5 bg-ink-600'}`}
+                                className={`h-1  ${i === index ? 'w-5 bg-signal' : 'w-1.5 bg-ink-600'}`}
                                 style={{ transition: `width ${DURATION}ms ${EASE}, background-color ${DURATION}ms` }}
                             />
                         ))}

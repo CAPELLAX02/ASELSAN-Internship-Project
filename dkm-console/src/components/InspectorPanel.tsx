@@ -6,6 +6,8 @@ import { useT, type Translate } from '../i18n/useT'
 import { useStore } from '../store/useStore'
 import { FieldEditor, type FieldPath } from './FieldEditor'
 import { LibraryPanel } from './LibraryPanel'
+import { LoadingLine, LoadingSpinner } from './LoadingSpinner'
+import { Segmented } from './Switch'
 import { clockTime } from './format'
 import type { Selection } from './MessagePanel'
 
@@ -59,8 +61,8 @@ export function InspectorPanel({ selection, onSelect }: {
             </div>
             <div className="flex-1 overflow-auto min-h-0 p-3">
                 {tab === 'message' && <MessageInspector selection={selection} onSelect={onSelect} />}
-                {tab === 'new' && <NewMessageForm />}
-                {tab === 'library' && <LibraryPanel />}
+                {tab === 'new' && <NewMessageForm selection={selection} />}
+                {tab === 'library' && <LibraryPanel selection={selection} />}
             </div>
         </div>
     )
@@ -73,7 +75,7 @@ function TabButton({ active, onClick, children }: {
         <button
             onClick={onClick}
             aria-pressed={active}
-            className={`px-2 py-0.5 rounded text-micro uppercase tracking-[0.14em] transition-colors ${active ? 'bg-signal-dim/30 text-signal' : 'text-ink-400 hover:text-ink-200'
+            className={`px-2 py-0.5  text-micro uppercase tracking-[0.14em] transition-colors ${active ? 'bg-signal-dim/30 text-signal' : 'text-ink-400 hover:text-ink-200'
                 }`}
         >
             {children}
@@ -96,6 +98,7 @@ function MessageInspector({ selection, onSelect }: {
     const [detail, setDetail] = useState<MessageDetail | null>(null)
     const [draft, setDraft] = useState<Record<string, unknown> | null>(null)
     const [busy, setBusy] = useState(false)
+    const [loading, setLoading] = useState(false)
     const [loadError, setLoadError] = useState<string | null>(null)
 
     const load = useCallback(async () => {
@@ -104,6 +107,7 @@ function MessageInspector({ selection, onSelect }: {
             setDraft(null)
             return
         }
+        setLoading(true)
         try {
             const result = selection.mode === 'input'
                 ? await api.sessionMessage(selection.id)
@@ -114,6 +118,8 @@ function MessageInspector({ selection, onSelect }: {
         } catch (error) {
             setLoadError((error as Error).message)
             setDetail(null)
+        } finally {
+            setLoading(false)
         }
     }, [selection])
 
@@ -128,6 +134,9 @@ function MessageInspector({ selection, onSelect }: {
 
     if (loadError) {
         return <div className="text-danger">{loadError}</div>
+    }
+    if (selection && !detail && loading) {
+        return <LoadingLine />
     }
     if (!selection || !detail) {
         return <div className="text-ink-500">{t('inspector.selectHint')}</div>
@@ -201,10 +210,12 @@ function MessageInspector({ selection, onSelect }: {
                 <div className="flex items-baseline gap-2 flex-wrap">
                     <span className="text-ink-100 text-body">{detail.type ?? `msg_id ${detail.msgId}`}</span>
                     <span className="text-ink-500">#{detail.id}</span>
-                    <span className={`chip ${isCapture
-                        ? 'border-signal/50 text-signal bg-signal/10'
-                        : detail.sent ? 'border-ink-600 text-ink-400' : 'border-good/50 text-good bg-good/10'}`}>
-                        {isCapture ? t('inspector.fromDkm') : detail.sent ? t('row.sent') : t('row.pending')}
+                    <span className={`badge ${detail.problem ? 'badge-blocked'
+                        : isCapture ? 'badge-capture'
+                            : detail.sent ? 'badge-sent' : 'badge-pending'}`}>
+                        {detail.problem ? t('row.blocked')
+                            : isCapture ? t('inspector.fromDkm')
+                                : detail.sent ? t('row.sent') : t('row.pending')}
                     </span>
                     {detail.origin && detail.origin !== 'FILE' && (
                         <span className="text-ink-500 text-micro">{detail.origin.toLowerCase()}</span>
@@ -224,13 +235,13 @@ function MessageInspector({ selection, onSelect }: {
             </div>
 
             {detail.problem && (
-                <div className="rounded border border-danger/50 bg-danger/10 text-danger px-2 py-1.5">
+                <div className=" border border-danger/50 bg-danger/10 text-danger px-2 py-1.5">
                     {detail.problem}
                 </div>
             )}
 
             {readOnlyReason && !detail.problem && (
-                <div className="rounded border border-ink-600 bg-ink-850 text-ink-400 px-2 py-1.5">
+                <div className=" border border-ink-600 bg-ink-850 text-ink-400 px-2 py-1.5">
                     {readOnlyReason}
                 </div>
             )}
@@ -248,7 +259,9 @@ function MessageInspector({ selection, onSelect }: {
             {!detail.decodable && <HeaderTable header={detail.header} />}
 
             <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-ink-700">
-                <button className="btn btn-primary" disabled={readOnly || !dirty || busy} onClick={apply}>
+                <button className="btn btn-primary flex items-center gap-1.5"
+                    disabled={readOnly || !dirty || busy} onClick={apply}>
+                    {busy && <LoadingSpinner size={12} />}
                     {t('inspector.apply')}
                 </button>
                 <button className="btn" disabled={!dirty || busy}
@@ -297,7 +310,7 @@ function HeaderTable({ header }: { header: Record<string, number> }) {
 }
 
 /** FR-9: a new message goes in at a chosen position with an explicit timing offset. */
-function NewMessageForm() {
+function NewMessageForm({ selection }: { selection: Selection | null }) {
     const t: Translate = useT()
     const schema = useStore((s) => s.schema)
     const sessionCount = useStore((s) => s.sessionCount)
@@ -319,9 +332,25 @@ function NewMessageForm() {
     const [offsetMillis, setOffsetMillis] = useState(500)
     const [draft, setDraft] = useState<Record<string, unknown>>({})
     const [busy, setBusy] = useState(false)
+    /**
+     * Where an insert lands. Two positions cover every real intent, and naming
+     * both of them beats a bare number field: "position 4207" says nothing about
+     * whether that is where the operator meant, whereas "after the selected
+     * message" is checkable against what they can see in the list.
+     */
+    const [placement, setPlacement] = useState<'after' | 'end'>('after')
 
     const typeName = chosenType ?? stimulusTypes[0]?.qualifiedName ?? ''
-    const index = chosenIndex ?? sessionCount
+
+    // The order field follows the placement unless the operator typed one, in
+    // which case it is theirs and nothing overwrites it.
+    const selectedIndex = selection?.mode === 'input' && selection.index !== undefined
+        ? selection.index
+        : null
+
+    const canPlaceAfter = selectedIndex !== null
+    const derivedIndex = placement === 'after' && canPlaceAfter ? selectedIndex + 1 : sessionCount
+    const index = chosenIndex ?? derivedIndex
 
     useEffect(() => {
         if (!typeName) return
@@ -339,7 +368,8 @@ function NewMessageForm() {
         setBusy(false)
         if (inserted) {
             touchSession()
-            // Back to tracking the end of the list, so a run of inserts appends.
+            // Back to following the placement rule, so a run of inserts stays
+            // predictable instead of piling up at whatever index was last typed.
             setChosenIndex(null)
             notify('INFO', t('new.inserted', {
                 type: inserted.type ?? '', index, timestamp: inserted.timestamp,
@@ -359,6 +389,27 @@ function NewMessageForm() {
                     ))}
                 </select>
             </label>
+
+            <div className="flex items-start gap-2">
+                <span className="w-44 shrink-0 text-ink-300 pt-0.5">{t('new.placement')}</span>
+                <span className="flex-1 min-w-0">
+                    <Segmented<'after' | 'end'>
+                        value={canPlaceAfter ? placement : 'end'}
+                        onChange={(next) => { setPlacement(next); setChosenIndex(null) }}
+                        options={[
+                            {
+                                value: 'after',
+                                label: t('new.placeAfter'),
+                                title: t('new.placeAfterTitle'),
+                            },
+                            { value: 'end', label: t('new.placeEnd'), title: t('new.placeEndTitle') },
+                        ]}
+                    />
+                    {!canPlaceAfter && (
+                        <span className="block text-ink-500 mt-1">{t('new.noSelection')}</span>
+                    )}
+                </span>
+            </div>
 
             <label className="flex items-center gap-2">
                 <span className="w-44 shrink-0 text-ink-300">{t('new.index')}</span>
@@ -383,7 +434,9 @@ function NewMessageForm() {
             )}
 
             <div className="flex items-center gap-2 pt-1 border-t border-ink-700">
-                <button className="btn btn-primary" disabled={!type || busy || running} onClick={insert}>
+                <button className="btn btn-primary flex items-center gap-1.5"
+                    disabled={!type || busy || running} onClick={insert}>
+                    {busy && <LoadingSpinner size={12} />}
                     {t('new.insert')}
                 </button>
                 {running && <span className="text-caution">{t('new.pauseFirst')}</span>}

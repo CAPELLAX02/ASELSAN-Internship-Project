@@ -1,11 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { api, downloadBinary, uploadInput } from '../api/client'
 import type { LinkState, PlaybackStateName } from '../api/types'
 import { LANGUAGES } from '../i18n'
 import { useT } from '../i18n/useT'
 import { useStore, type ThemeChoice } from '../store/useStore'
+import { AlertDialog } from './AlertDialog'
 import { bytes, count, duration, rate } from './format'
+import type { Selection } from './MessagePanel'
+import { LoadingSpinner } from './LoadingSpinner'
 
 const LINK_STYLES: Record<LinkState, string> = {
     CONNECTED: 'border-good/60 text-good bg-good/10',
@@ -18,7 +21,7 @@ const LINK_STYLES: Record<LinkState, string> = {
 const SPEEDS = [0.25, 0.5, 1, 2, 5, 10, 25, 100]
 const THEME_ORDER: ThemeChoice[] = ['system', 'light', 'dark']
 
-export function TopBar() {
+export function TopBar({ selection }: { selection: Selection | null }) {
     const t = useT()
     const links = useStore((s) => s.links)
     const playback = useStore((s) => s.playback)
@@ -31,8 +34,15 @@ export function TopBar() {
     const run = useStore((s) => s.run)
     const notify = useStore((s) => s.notify)
     const touchSession = useStore((s) => s.touchSession)
+    const pending = useStore((s) => s.pending)
+    const setVizFrozen = useStore((s) => s.setVizFrozen)
 
     const [busy, setBusy] = useState(false)
+    const [problemCount, setProblemCount] = useState(0)
+    const [askProblems, setAskProblems] = useState(false)
+    const [askStart, setAskStart] = useState(false)
+    const [askStop, setAskStop] = useState(false)
+    const [startType, setStartType] = useState<string | null>(null)
 
     const running = playback.state === 'RUNNING'
     const paused = playback.state === 'PAUSED'
@@ -41,6 +51,98 @@ export function TopBar() {
         setBusy(true)
         await run(action, describe)
         setBusy(false)
+    }
+
+    /**
+     * Stopping holds the picture still, so the last frame of a run stays
+     * readable. Starting or resuming releases it again -- a run that began
+     * against a frozen canvas would look like nothing was happening.
+     */
+    const stop = () => act(async () => {
+        const snapshot = await api.stop(true)
+        setVizFrozen(true)
+        return snapshot
+    }, t('transport.stop'))
+
+    // Stopping rewinds, so a run that is part way through loses its place. Worth
+    // one question -- but only when there is something to lose: asking before a
+    // stop that discards nothing is the kind of prompt people learn to click
+    // through without reading, which is how the one that matters gets missed.
+    const onStop = () => {
+        if (playback.sent > 0 && (running || paused)) {
+            setAskStop(true)
+            return
+        }
+        void stop()
+    }
+
+    /** Where a fresh run would begin: a selected stimulus message, or the top. */
+    const startFrom = selection?.mode === 'input' ? selection : null
+
+    const begin = async () => {
+        setVizFrozen(false)
+        await act(() => (paused ? api.resume() : api.start(startFrom?.id ?? 0)),
+            paused ? t('transport.resume') : t('transport.start'))
+    }
+
+    // A run that has reached its last message is over; making the operator press
+    // Stop to say so leaves the transport claiming a run is in progress when
+    // nothing is being sent. Rewinding here is what Stop does, so the set is
+    // immediately runnable again.
+    const onStartAfterProblems = async () => {
+        if (startFrom) {
+            const detail = await run(() => api.sessionMessage(startFrom.id))
+            setStartType(detail?.type ?? null)
+        } else {
+            setStartType(null)
+        }
+        setAskStart(true)
+    }
+
+    const finishing = useRef(false)
+    useEffect(() => {
+        if (playback.state !== 'FINISHED' || finishing.current) {
+            finishing.current = playback.state === 'FINISHED'
+            return
+        }
+        finishing.current = true
+        void run(async () => {
+            const snapshot = await api.stop(true)
+            setVizFrozen(true)
+            return snapshot
+        }, t('transport.stop'))
+    }, [playback.state, run, setVizFrozen, t])
+
+    // FR-31/NFR-5: messages that failed to decode are kept and saved byte for
+    // byte, but the run skips them. Worth saying before the run rather than
+    // after, when the gap in the output is all there is to go on.
+    useEffect(() => {
+        let cancelled = false
+        void api.sessionMessages({ status: 'problem', limit: 1 })
+            .then((page) => { if (!cancelled) setProblemCount(page.filtered) })
+            .catch(() => { if (!cancelled) setProblemCount(0) })
+        return () => { cancelled = true }
+    }, [sessionCount, sessionSource])
+
+    // Resuming needs no explanation -- the operator paused it and knows where it
+    // is. A fresh start does: it either replays everything or begins part way
+    // through, and those are different acts against a live link.
+    const onStart = async () => {
+        if (paused) {
+            void begin()
+            return
+        }
+        if (problemCount > 0) {
+            setAskProblems(true)
+            return
+        }
+        if (startFrom) {
+            const detail = await run(() => api.sessionMessage(startFrom.id))
+            setStartType(detail?.type ?? null)
+        } else {
+            setStartType(null)
+        }
+        setAskStart(true)
     }
 
     const onUpload = async (file: File | undefined) => {
@@ -98,6 +200,7 @@ export function TopBar() {
                     <span title={t('transport.rateIn')}>
                         &darr; <span className="text-ink-200">{rate(totalIn)}</span>
                     </span>
+                    {pending > 0 && <LoadingSpinner className="text-signal" />}
                     <span className={eventsConnected ? 'text-good' : 'text-danger'} title={t('transport.eventsTitle')}>
                         {t('transport.events')}
                     </span>
@@ -114,8 +217,7 @@ export function TopBar() {
                     <button
                         className="btn btn-primary"
                         disabled={busy || running}
-                        onClick={() => act(() => (paused ? api.resume() : api.start()),
-                            paused ? t('transport.resume') : t('transport.start'))}
+                        onClick={onStart}
                         title={paused ? t('transport.resumeTitle') : t('transport.startTitle')}
                     >
                         {paused ? t('transport.resume') : t('transport.start')}
@@ -131,7 +233,7 @@ export function TopBar() {
                     <button
                         className="btn btn-danger"
                         disabled={busy || playback.state === 'IDLE'}
-                        onClick={() => act(() => api.stop(true), t('transport.stop'))}
+                        onClick={onStop}
                         title={t('transport.stopTitle')}
                     >
                         {t('transport.stop')}
@@ -165,7 +267,7 @@ export function TopBar() {
                 </div>
 
                 <div className="flex items-center gap-2 pl-2 border-l border-ink-700 min-w-[260px]">
-                    <div className="h-1.5 w-32 rounded-full bg-ink-800 overflow-hidden">
+                    <div className="h-1.5 w-32  bg-ink-800 overflow-hidden">
                         <div
                             className="h-full bg-signal transition-[width] duration-150"
                             style={{ width: `${progress}%` }}
@@ -229,6 +331,49 @@ export function TopBar() {
             </div>
 
             <PlaybackStateBanner state={playback.state} error={playback.error} />
+
+            <AlertDialog
+                open={askProblems}
+                tone="caution"
+                title={t('dialog.problemsTitle')}
+                body={t('dialog.problemsBody', { count: count(problemCount) })}
+                confirmLabel={t('dialog.problemsConfirm')}
+                cancelLabel={t('dialog.problemsReview')}
+                busy={busy}
+                onConfirm={() => { setAskProblems(false); void onStartAfterProblems() }}
+                onCancel={() => setAskProblems(false)}
+            />
+
+            <AlertDialog
+                open={askStop}
+                title={t('dialog.stopTitle')}
+                body={t('dialog.stopBody', {
+                    sent: count(playback.sent), planned: count(playback.planned),
+                })}
+                detail={running ? t('dialog.stopHint') : null}
+                confirmLabel={t('dialog.stopConfirm')}
+                busy={busy}
+                onConfirm={() => { setAskStop(false); void stop() }}
+                onCancel={() => setAskStop(false)}
+            />
+
+            <AlertDialog
+                open={askStart}
+                tone="signal"
+                title={startFrom ? t('dialog.startFromTitle') : t('dialog.startTitle')}
+                body={startFrom
+                    ? t('dialog.startFromBody', {
+                        index: count((startFrom.index ?? 0) + 1),
+                        type: startType ?? '',
+                    })
+                    : t('dialog.startBody')}
+                detail={startFrom ? t('dialog.startFromHint') : t('dialog.startHint')}
+                confirmLabel={startFrom ? t('dialog.startFromConfirm') : t('dialog.startConfirm')}
+                cancelLabel={t('dialog.startBack')}
+                busy={busy}
+                onConfirm={() => { setAskStart(false); void begin() }}
+                onCancel={() => setAskStart(false)}
+            />
         </header>
     )
 }
@@ -255,7 +400,7 @@ function Settings() {
             </button>
 
             <div
-                className="flex rounded border border-ink-600 overflow-hidden"
+                className="flex  border border-ink-600 overflow-hidden"
                 role="group"
                 aria-label={t('settings.language')}
             >

@@ -568,12 +568,22 @@ export class Scene {
             }
         }
 
+        // Reporting areas answer on their border, not across their interior.
+        // They are the largest thing drawn -- the current one spans the whole
+        // coverage -- so an interior hit would make every empty pixel of the
+        // display report "reporting area" and bury everything the operator was
+        // actually reaching for. The border is the part that carries the
+        // information anyway: where the inclusion test starts and stops.
         for (const area of this.rects.values()) {
             const x0 = Math.min(area.a, area.b)
             const x1 = Math.max(area.a, area.b)
             const y0 = Math.min(area.c, area.d)
             const y1 = Math.max(area.c, area.d)
-            if (x >= x0 && x <= x1 && y >= y0 && y <= y1) {
+            const insideOuter = x >= x0 - tolerance && x <= x1 + tolerance
+                && y >= y0 - tolerance && y <= y1 + tolerance
+            const insideInner = x > x0 + tolerance && x < x1 - tolerance
+                && y > y0 + tolerance && y < y1 - tolerance
+            if (insideOuter && !insideInner) {
                 return {
                     kind: 'rect', link: area.link, msgId: area.msgId, output: area.fromOutput,
                     x0, x1, y0, y1

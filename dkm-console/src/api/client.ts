@@ -37,7 +37,9 @@ export const api = {
     log: (limit = 400) => request<LogLine[]>(`/api/status/log?limit=${limit}`),
 
     playback: () => request<PlaybackSnapshot>('/api/playback'),
-    start: () => request<PlaybackSnapshot>('/api/playback/start', { method: 'POST' }),
+    /** `from` starts the run at that message instead of the first (FR-11). */
+    start: (fromMessageId = 0) => request<PlaybackSnapshot>(
+        `/api/playback/start${fromMessageId ? `?from=${fromMessageId}` : ''}`, { method: 'POST' }),
     pause: () => request<PlaybackSnapshot>('/api/playback/pause', { method: 'POST' }),
     resume: () => request<PlaybackSnapshot>('/api/playback/resume', { method: 'POST' }),
     stop: (rewind: boolean) =>
@@ -58,6 +60,10 @@ export const api = {
         }),
     insertMessage: (body: { type: string; index: number; offsetMillis: number; payload?: unknown }) =>
         request<MessageDetail>('/api/session/messages', { method: 'POST', body: json(body) }),
+    /** FR-9: reorder a pending message. Only the order changes; timestamps stay put. */
+    moveMessage: (id: number, index: number) =>
+        request<{ id: number; index: number; total: number }>(
+            `/api/session/messages/${id}/index`, { method: 'PUT', body: json({ index }) }),
     deleteMessage: (id: number) =>
         request<{ deleted: boolean; total: number }>(`/api/session/messages/${id}`, { method: 'DELETE' }),
     template: (type: string) =>
@@ -67,6 +73,9 @@ export const api = {
         request<{ messages: number; bytes: number; notes: string[]; problems: string[] }>(
             '/api/session/load-path', { method: 'POST', body: json({ path }) }),
     clearSession: () => request<{ total: number }>('/api/session/clear', { method: 'POST' }),
+    /** Drops every edit since the load and reads the file back in. */
+    revertSession: () => request<{ messages: number; bytes: number }>(
+        '/api/session/revert', { method: 'POST' }),
     saveToLibrary: (id: number, body: { name: string; description?: string; tags?: string[] }) =>
         request<LibraryItem>(`/api/session/messages/${id}/library`, { method: 'POST', body: json(body) }),
 

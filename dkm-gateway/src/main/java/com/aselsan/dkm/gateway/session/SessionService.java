@@ -47,6 +47,19 @@ public class SessionService {
     private final ReentrantLock lock = new ReentrantLock();
     private MessageSet messages;
 
+    /**
+     * The bytes exactly as they were loaded, so the operator can put an edited
+     * set back the way it came.
+     *
+     * <p>A file rather than a second buffer in memory: the working set is
+     * already held off-heap in one arena, and keeping a second copy of it
+     * resident would double the cost of the very thing this tool is built to
+     * handle at size. Edits write into the arena in place, so the original
+     * cannot be recovered from it -- something has to hold it, and a temporary
+     * file is the cheapest place.
+     */
+    private Path original;
+
     @PostConstruct
     void init() {
         messages = new MessageSet(schemaService.model(), schemaService.codec(), 64 * 1024);
@@ -92,6 +105,7 @@ public class SessionService {
         }
         lock.lock();
         try {
+            rememberOriginal(buf, name);
             MessageSet.ParseResult result = messages.adopt(buf, name);
             events.info("session", "loaded " + result.messages() + " message(s) from " + name
                     + " (" + result.bytesConsumed() + " bytes)");
@@ -118,6 +132,45 @@ public class SessionService {
             return messages.writeTo(out);
         } finally {
             lock.unlock();
+        }
+    }
+
+    /** Whether there is a loaded file to go back to. */
+    public boolean canRevert() {
+        return original != null && Files.isReadable(original);
+    }
+
+    /**
+     * Puts the set back exactly as the file was loaded, dropping every edit,
+     * insertion, deletion and reorder since.
+     */
+    public MessageSet.ParseResult revert() throws IOException {
+        Path snapshot = original;
+        if (snapshot == null || !Files.isReadable(snapshot)) {
+            throw new IllegalStateException("nothing to revert to -- no file has been loaded this session");
+        }
+        String name = read(() -> messages.sourceName());
+        try (InputStream in = Files.newInputStream(snapshot)) {
+            MessageSet.ParseResult result = load(in, name, Files.size(snapshot));
+            events.info("session", "reverted to " + name + " as loaded; every edit since was dropped");
+            return result;
+        }
+    }
+
+    private void rememberOriginal(ByteBuf buf, String name) {
+        try {
+            if (original == null) {
+                original = Files.createTempFile("dkm-session-", ".bin");
+                original.toFile().deleteOnExit();
+            }
+            try (OutputStream out = Files.newOutputStream(original)) {
+                buf.getBytes(0, out, buf.writerIndex());
+            }
+        } catch (IOException e) {
+            // Not fatal: the set still loads, only "revert" becomes unavailable,
+            // and the console reads that from canRevert() rather than guessing.
+            original = null;
+            events.warn("session", "could not keep a copy of " + name + " for revert: " + e.getMessage());
         }
     }
 
@@ -243,6 +296,71 @@ public class SessionService {
         }
     }
 
+    /**
+     * Moves a pending message to another position (FR-9).
+     *
+     * <p>A sent message cannot be moved for the same reason it cannot be edited:
+     * it is history, and history that reorders itself is not history.
+     *
+     * @return the index it ended up at
+     */
+    public int move(long id, int toIndex) {
+        lock.lock();
+        try {
+            MessageEntry entry = messages.byId(id);
+            if (entry == null) {
+                return -1;
+            }
+            if (entry.sent) {
+                throw new IllegalStateException("message " + id + " has already been sent and cannot be moved");
+            }
+            List<MessageEntry> list = messages.entries();
+            int from = messages.indexOf(id);
+            int to = Math.min(Math.max(toIndex, 0), list.size() - 1);
+            if (from < 0) {
+                return -1;
+            }
+
+            // The timestamps belong to the positions, not to the messages. A
+            // recording runs in ascending time, so if a moved message carried its
+            // own timestamp with it the list would come back out of order and the
+            // replay clock would send it at the wrong moment. Taking the slice's
+            // timestamps before the move and writing them back afterwards keeps
+            // the timeline exactly as it was and changes only what goes out when.
+            int low = Math.min(from, to);
+            int high = Math.max(from, to);
+            long[] schedule = new long[high - low + 1];
+            for (int i = low; i <= high; i++) {
+                schedule[i - low] = list.get(i).timestamp;
+            }
+
+            int at = messages.move(id, to);
+            if (at < 0) {
+                return -1;
+            }
+            for (int i = low; i <= high; i++) {
+                MessageEntry occupant = list.get(i);
+                if (occupant.timestamp != schedule[i - low]) {
+                    rewriteTimestamp(occupant, schedule[i - low]);
+                }
+            }
+            publishChanged(entry, "moved");
+            return at;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /** Writes a new timestamp into a message's header, leaving every other byte alone. */
+    private void rewriteTimestamp(MessageEntry entry, long timestamp) {
+        byte[] bytes = messages.bytesOf(entry);
+        ByteBuf buf = Unpooled.wrappedBuffer(bytes);
+        MessageCodec codec = schemaService.codec();
+        codec.writeHeader(buf, 0, codec.senderId(buf, 0), codec.receiverId(buf, 0),
+                codec.msgId(buf, 0), Math.max(0, timestamp), codec.msgLength(buf, 0));
+        messages.replace(entry, bytes);
+    }
+
     /** Re-timestamps a pending message; the shared replay clock re-derives from this on the next start (FR-14). */
     public MessageEntry retime(long id, long timestamp) {
         lock.lock();
@@ -254,12 +372,7 @@ public class SessionService {
             if (entry.sent) {
                 throw new IllegalStateException("message " + id + " has already been sent");
             }
-            byte[] bytes = messages.bytesOf(entry);
-            ByteBuf buf = Unpooled.wrappedBuffer(bytes);
-            MessageCodec codec = schemaService.codec();
-            codec.writeHeader(buf, 0, codec.senderId(buf, 0), codec.receiverId(buf, 0),
-                    codec.msgId(buf, 0), Math.max(0, timestamp), codec.msgLength(buf, 0));
-            messages.replace(entry, bytes);
+            rewriteTimestamp(entry, timestamp);
             publishChanged(entry, "retimed");
             return entry;
         } finally {
@@ -278,10 +391,28 @@ public class SessionService {
 
     /** Clears the sent markers so the whole set is editable and replayable again (FR-11 "stop"). */
     public void resetSentMarkers() {
+        resetSentMarkers(0);
+    }
+
+    /**
+     * Clears the sent markers, then marks everything before {@code fromId} as
+     * already sent so the next run begins there (0 means the whole set).
+     *
+     * <p>Expressed through the sent markers rather than as a separate "start
+     * index" because that is where the engine already looks: FR-14 rebuilds the
+     * plan from whatever is unsent on every start and resume, so starting part
+     * way through needs no new concept and behaves correctly if the operator
+     * then pauses, edits and resumes.
+     */
+    public void resetSentMarkers(long fromId) {
         lock.lock();
         try {
+            boolean before = fromId != 0;
             for (MessageEntry entry : messages.entries()) {
-                entry.sent = false;
+                if (before && entry.id == fromId) {
+                    before = false;
+                }
+                entry.sent = before;
                 entry.wallClock = 0;
             }
             publishReloaded();

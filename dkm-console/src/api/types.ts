@@ -140,6 +140,10 @@ export interface TracePage {
 
 export interface MessagePage {
     source?: string
+    /** Stimulus only: something has been edited since the file was loaded. */
+    dirty?: boolean
+    /** Stimulus only: there is a loaded file to go back to. */
+    revertable?: boolean
     sort?: SortKey
     dir?: SortDir
     total: number

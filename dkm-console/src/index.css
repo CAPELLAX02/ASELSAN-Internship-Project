@@ -1,24 +1,28 @@
 @import "tailwindcss";
 
 :root {
-    --c-950: #0c0a09;
-    --c-900: #1a1817;
-    --c-850: #211e1c;
-    --c-800: #292524;
-    --c-700: #383331;
-    --c-600: #4a443f;
-    --c-500: #6b635c;
-    --c-400: #9c948d;
-    --c-300: #bdb6b0;
-    --c-200: #e3dfdb;
-    --c-100: #faf9f8;
+    /* Eleven steps, spaced so that neighbours are always distinguishable at a
+       glance. The old scale bunched 900/850/800 within six points of each
+       other, which made a panel, its header and a raised control read as one
+       flat surface. */
+    --c-950: #080706;
+    --c-900: #151312;
+    --c-850: #1e1b19;
+    --c-800: #2b2724;
+    --c-700: #3d3835;
+    --c-600: #554e49;
+    --c-500: #776e67;
+    --c-400: #a49b93;
+    --c-300: #c7c0ba;
+    --c-200: #e9e5e1;
+    --c-100: #ffffff;
 
-    --c-signal: #4ec9dd;
-    --c-signal-dim: #1d7f92;
-    --c-caution: #e8a33d;
-    --c-danger: #ef6b60;
-    --c-good: #56c97f;
-    --c-track: #b39df4;
+    --c-signal: #5ad8ec;
+    --c-signal-dim: #1b8ea5;
+    --c-caution: #f0ad45;
+    --c-danger: #f5776b;
+    --c-good: #5fd689;
+    --c-track: #bda7ff;
 
     --c-canvas: #0c0a09;
     --c-grid: #3d3733;
@@ -156,7 +160,7 @@ input[type="number"] {
 
 *::-webkit-scrollbar-thumb {
     background: var(--c-600);
-    border-radius: 5px;
+    border-radius: 0;
 }
 
 *::-webkit-scrollbar-thumb:hover {
@@ -174,7 +178,19 @@ input[type="range"] {
 :focus-visible {
     outline: 2px solid var(--c-signal);
     outline-offset: 1px;
-    border-radius: 2px;
+    border-radius: 0;
+}
+
+/* The one spinner. */
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.spin {
+    animation: spin 900ms linear infinite;
+    transform-origin: 50% 50%;
 }
 
 @keyframes tour-step-in {
@@ -202,20 +218,31 @@ input[type="range"] {
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
     }
+
+    /* A stopped spinner reads as a hung one, which is the opposite of what it
+       is there to say. Slowed rather than frozen. */
+    .spin {
+        animation-duration: 2200ms !important;
+        animation-iteration-count: infinite !important;
+    }
 }
 
 @layer components {
     .panel {
-        @apply bg-ink-900 border border-ink-700 rounded-md overflow-hidden flex flex-col min-h-0;
+        @apply bg-ink-900 border border-ink-700 overflow-hidden flex flex-col min-h-0;
         box-shadow: var(--shadow-panel);
     }
 
     .panel-title {
-        @apply px-3 py-1.5 text-mini uppercase tracking-[0.1em] font-semibold text-ink-400 bg-ink-850 border-b border-ink-700 flex items-center justify-between shrink-0;
+        @apply px-3 py-2 text-mini uppercase tracking-[0.12em] font-semibold text-ink-300 bg-ink-850 border-b border-ink-700 flex items-center justify-between shrink-0 gap-3;
     }
 
     .btn {
-        @apply px-2.5 py-1 rounded border border-ink-600 bg-ink-800 text-ink-200 hover:bg-ink-700 hover:border-ink-500 active:translate-y-px disabled:opacity-35 disabled:pointer-events-none transition-colors;
+        @apply px-3 py-1 border border-ink-600 bg-ink-800 text-ink-200
+               hover:bg-ink-700 hover:border-ink-400 hover:text-ink-100
+               active:bg-ink-850
+               disabled:opacity-30 disabled:pointer-events-none
+               transition-colors duration-100;
     }
 
     .btn-primary {
@@ -227,10 +254,41 @@ input[type="range"] {
     }
 
     .field {
-        @apply w-full bg-ink-950 border border-ink-600 rounded px-2 py-1 text-ink-100 focus:outline-none focus:border-signal/70 focus:ring-1 focus:ring-signal/30;
+        @apply w-full bg-ink-950 border border-ink-600 rounded-none px-2 py-1 text-ink-100 focus:outline-none focus:border-signal/70 focus:ring-1 focus:ring-signal/30;
     }
 
     .chip {
-        @apply inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-mini;
+        @apply inline-flex items-center gap-1.5 px-2 py-0.5 border text-mini;
+    }
+
+    /* One badge vocabulary for the whole interface, so a state means the same
+       colour wherever it is shown: the list, the inspector, the library. Each
+       carries a tinted ground as well as a border -- a bare outline at this
+       size reads as a disabled control rather than a state. Nothing here is
+       grey: grey is what the interface uses for things that are not saying
+       anything, and a status always is. */
+    .badge {
+        @apply inline-flex items-center justify-center px-1.5 border
+               text-micro uppercase tracking-[0.06em] font-semibold whitespace-nowrap;
+    }
+
+    /* It went out. */
+    .badge-sent {
+        @apply border-good/45 text-good bg-good/12;
+    }
+
+    /* Still to go, and still editable. */
+    .badge-pending {
+        @apply border-caution/45 text-caution bg-caution/12;
+    }
+
+    /* Kept and saved byte for byte, but the run will skip it (NFR-5). */
+    .badge-blocked {
+        @apply border-danger/50 text-danger bg-danger/14;
+    }
+
+    /* Came back from the DKM. Read-only, always. */
+    .badge-capture {
+        @apply border-signal/45 text-signal bg-signal/12;
     }
 }

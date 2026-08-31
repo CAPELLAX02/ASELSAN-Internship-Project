@@ -88,6 +88,10 @@ public class SessionResource {
 
             ObjectNode node = NODES.objectNode();
             node.put("source", set.sourceName());
+            // So the console can warn before clearing a set that has been edited,
+            // and stay quiet about one that is exactly what was loaded.
+            node.put("dirty", set.isDirty());
+            node.put("revertable", session.canRevert());
             node.put("sort", order.name().toLowerCase(java.util.Locale.ROOT));
             node.put("dir", descending ? "desc" : "asc");
             node.put("total", set.size());
@@ -163,6 +167,35 @@ public class SessionResource {
         requireNotRunning();
         MessageEntry entry = session.retime(id, body.path("timestamp").asLong());
         return session.read(() -> views.detail(session.messages(), entry));
+    }
+
+    /** Puts the set back exactly as the file was loaded, dropping every edit since. */
+    @POST
+    @Path("/revert")
+    public ObjectNode revert() throws IOException {
+        requireNotRunning();
+        MessageSet.ParseResult result = session.revert();
+        ObjectNode node = NODES.objectNode();
+        node.put("messages", result.messages());
+        node.put("bytes", result.bytesConsumed());
+        return node;
+    }
+
+    /** FR-9: reorders a pending message, so the operator can change what goes out first. */
+    @PUT
+    @Path("/messages/{id}/index")
+    @Consumes(MediaType.APPLICATION_JSON)
+    public ObjectNode move(@PathParam("id") long id, JsonNode body) {
+        requireNotRunning();
+        int at = session.move(id, body.path("index").asInt());
+        if (at < 0) {
+            throw new IllegalArgumentException("no message with id " + id);
+        }
+        ObjectNode node = NODES.objectNode();
+        node.put("id", id);
+        node.put("index", at);
+        node.put("total", session.read(() -> session.messages().size()));
+        return node;
     }
 
     /** FR-9: a new message goes in at a chosen position with an explicit timing offset. */

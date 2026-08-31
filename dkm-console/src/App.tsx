@@ -4,6 +4,7 @@ import { InspectorPanel } from './components/InspectorPanel'
 import { LogPanel } from './components/LogPanel'
 import { MessagePanel, type Selection } from './components/MessagePanel'
 import { RadarView } from './components/RadarView'
+import { LoadingSpinner } from './components/LoadingSpinner'
 import { TopBar } from './components/TopBar'
 import { Tour } from './components/Tour'
 import { useT } from './i18n/useT'
@@ -48,7 +49,8 @@ export default function App() {
 
     if (!ready) {
         return (
-            <div className="h-full flex items-center justify-center text-ink-500">
+            <div className="h-full flex items-center justify-center gap-2 text-ink-500">
+                <LoadingSpinner size={16} />
                 {t('app.loading')}
             </div>
         )
@@ -56,24 +58,27 @@ export default function App() {
 
     return (
         <div className="h-full flex flex-col">
-            <TopBar />
+            <TopBar selection={selection} />
 
+            {/* The stimulus list gets more room than the inspector: it carries six
+                columns and is the panel the operator scans, while the inspector
+                shows one message at a time in a stack of labelled fields. */}
             <main
-                className="flex-1 min-h-0 grid gap-2 p-2"
-                style={{ gridTemplateColumns: 'minmax(360px, 1.05fr) minmax(420px, 1.5fr) minmax(340px, 1fr)' }}
+                className="flex-1 min-h-0 grid gap-px p-px bg-ink-700"
+                style={{ gridTemplateColumns: 'minmax(420px, 1.25fr) minmax(460px, 1.6fr) minmax(330px, 0.95fr)' }}
             >
-                <div className="flex flex-col gap-2 min-h-0">
+                <div className="flex flex-col min-h-0">
                     <MessagePanel selection={selection} onSelect={setSelection} />
                 </div>
 
-                <div className="flex flex-col gap-2 min-h-0">
+                <div className="grid grid-rows-[1fr_auto] gap-px min-h-0 bg-ink-700">
                     <RadarView />
-                    <div className="h-48 shrink-0">
+                    <div className="h-52">
                         <LogPanel />
                     </div>
                 </div>
 
-                <div className="flex flex-col gap-2 min-h-0">
+                <div className="flex flex-col min-h-0">
                     <InspectorPanel selection={selection} onSelect={setSelection} />
                 </div>
             </main>
@@ -92,13 +97,16 @@ export default function App() {
                     })}
                 </span>
                 <div className="flex-1" />
-                <span>{t('app.footerNote')}</span>
+                <span className="text-ink-600">{t('app.footerNote')}</span>
+                <span className="px-3 border-l border-ink-700 text-ink-400">
+                    {t('app.credit')}
+                </span>
             </footer>
 
             <Tour />
 
             {notice && (
-                <div className={`fixed bottom-4 left-1/2 -translate-x-1/2 max-w-2xl px-3 py-2 rounded border
+                <div className={`fixed bottom-4 left-1/2 -translate-x-1/2 max-w-2xl px-3 py-2  border
                          shadow-lg backdrop-blur z-40 ${notice.level === 'ERROR'
                         ? 'bg-danger/20 border-danger/60 text-danger'
                         : notice.level === 'WARN'

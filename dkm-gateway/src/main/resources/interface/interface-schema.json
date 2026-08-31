@@ -1,5 +1,5 @@
 {
-  "version": "1.1.0",
+  "version": "1.1",
   "description": "DKM message interface, derived from mock_r/inc/interface/*.h. Regenerate with HeaderSchemaGenerator; SchemaDriftTest fails if the headers and this file disagree.",
   "sourceHeaders": [
     "interface/common.h",
