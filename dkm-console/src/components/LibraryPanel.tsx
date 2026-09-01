@@ -4,10 +4,13 @@ import { api } from '../api/client'
 import type { LibraryItem } from '../api/types'
 import { useT } from '../i18n/useT'
 import { useStore } from '../store/useStore'
+import { Icon } from './Icon'
 import { AlertDialog } from './AlertDialog'
+import { count } from './format'
 import { LoadingSpinner } from './LoadingSpinner'
 import type { Selection } from './MessagePanel'
 import { Segmented } from './Switch'
+import { usePlacementCheck, type Placement } from './usePlacementCheck'
 
 /**
  * The reusable message library (FR-23, FR-24).
@@ -36,6 +39,8 @@ export function LibraryPanel({ selection }: { selection: Selection | null }) {
     const [offsetMillis, setOffsetMillis] = useState(500)
     const [askStale, setAskStale] = useState<LibraryItem | null>(null)
     const [askDelete, setAskDelete] = useState<LibraryItem | null>(null)
+    const [verdict, setVerdict] = useState<{ check: Placement; item: LibraryItem } | null>(null)
+    const checkPlacement = usePlacementCheck()
 
     const sessionCount = useStore((s) => s.sessionCount)
     const running = useStore((s) => s.playback.state === 'RUNNING')
@@ -81,9 +86,18 @@ export function LibraryPanel({ selection }: { selection: Selection | null }) {
         }
     }
 
-    const insert = (item: LibraryItem) => {
+    // Same rule as the new-message form: the list stays in ascending time, so
+    // an insert either lands where it was asked to or the operator is told
+    // where it will land instead.
+    const insert = async (item: LibraryItem) => {
         if (item.stale) {
             setAskStale(item)
+            return
+        }
+        const anchor = placement === 'after' && canPlaceAfter ? selectedIndex : null
+        const check = await checkPlacement(anchor, offsetMillis)
+        if (check.verdict !== 'ok') {
+            setVerdict({ check, item })
             return
         }
         void doInsert(item)
@@ -101,13 +115,17 @@ export function LibraryPanel({ selection }: { selection: Selection | null }) {
 
     return (
         <div className="flex flex-col gap-3">
-            <input
-                className="field"
-                placeholder={t('library.search')}
-                value={query}
-                disabled={Boolean(unavailable)}
-                onChange={(e) => setQuery(e.target.value)}
-            />
+            <span className="relative flex items-center">
+                <Icon name="search" size={12}
+                    className="absolute left-2 text-ink-500 pointer-events-none" />
+                <input
+                    className="field pl-7"
+                    placeholder={t('library.search')}
+                    value={query}
+                    disabled={Boolean(unavailable)}
+                    onChange={(e) => setQuery(e.target.value)}
+                />
+            </span>
 
             {!unavailable && (
                 <div className="flex flex-col gap-2 border border-ink-700 bg-ink-850/50 px-2.5 py-2">
@@ -167,9 +185,13 @@ export function LibraryPanel({ selection }: { selection: Selection | null }) {
                             )}
                             <div className="flex-1" />
                             <button className="btn py-0 text-mini" disabled={busy || running}
-                                onClick={() => insert(item)}>{t('library.insert')}</button>
+                                onClick={() => void insert(item)}>
+                                <Icon name="plus" size={11} />{t('library.insert')}
+                            </button>
                             <button className="btn btn-danger py-0 text-mini" disabled={busy}
-                                onClick={() => setAskDelete(item)}>{t('library.delete')}</button>
+                                onClick={() => setAskDelete(item)}>
+                                <Icon name="trash" size={11} />{t('library.delete')}
+                            </button>
                         </div>
                         <div className="text-ink-500 mt-0.5">
                             {item.typeName} &middot; {item.length} B &middot; interface {item.schemaVersion}
@@ -198,6 +220,34 @@ export function LibraryPanel({ selection }: { selection: Selection | null }) {
                 busy={busy}
                 onConfirm={() => { const item = askStale; setAskStale(null); if (item) void doInsert(item) }}
                 onCancel={() => setAskStale(null)}
+            />
+
+            <AlertDialog
+                open={verdict !== null}
+                tone={verdict?.check.verdict === 'negative' ? 'danger' : 'caution'}
+                title={verdict?.check.verdict === 'negative'
+                    ? t('dialog.negativeTitle') : t('dialog.placeTitle')}
+                body={verdict?.check.verdict === 'negative'
+                    ? t('dialog.negativeBody', { offset: count(verdict.check.offsetMillis) })
+                    : t('dialog.placeBody', {
+                        offset: count(offsetMillis),
+                        index: count((selectedIndex ?? 0) + 1),
+                        timestamp: count(verdict?.check.verdict === 'reordered' ? verdict.check.timestamp : 0),
+                        next: count(verdict?.check.verdict === 'reordered' ? verdict.check.nextTimestamp : 0),
+                    })}
+                detail={verdict?.check.verdict === 'reordered'
+                    ? t('dialog.placeHint', { max: count(verdict.check.maxOffsetMillis) })
+                    : null}
+                confirmLabel={verdict?.check.verdict === 'negative'
+                    ? t('dialog.negativeConfirm') : t('dialog.placeConfirm')}
+                cancelLabel={verdict?.check.verdict === 'negative' ? undefined : t('dialog.startBack')}
+                busy={busy}
+                onConfirm={() => {
+                    const pending = verdict
+                    setVerdict(null)
+                    if (pending?.check.verdict === 'reordered') void doInsert(pending.item)
+                }}
+                onCancel={() => setVerdict(null)}
             />
 
             <AlertDialog

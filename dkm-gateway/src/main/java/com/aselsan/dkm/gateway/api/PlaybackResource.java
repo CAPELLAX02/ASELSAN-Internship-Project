@@ -35,6 +35,23 @@ public class PlaybackResource {
         return engine.snapshot();
     }
 
+    /**
+     * FR-11: send the next few messages and wait, for a DKM that needs time.
+     *
+     * <p>{@code from} steps from a chosen message instead of continuing, which
+     * is how an operator gets to the interesting part of a long recording
+     * without hand-stepping through everything in front of it.
+     */
+    @POST
+    @Path("/step")
+    public ObjectNode step(@QueryParam("count") @DefaultValue("1") int count,
+                           @QueryParam("from") @DefaultValue("0") long from) {
+        int sent = engine.step(Math.min(Math.max(count, 1), 1000), from);
+        ObjectNode node = engine.snapshot();
+        node.put("stepped", sent);
+        return node;
+    }
+
     @POST
     @Path("/pause")
     public ObjectNode pause() {

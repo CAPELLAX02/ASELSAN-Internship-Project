@@ -5,6 +5,7 @@ import type { VizKindName } from '../api/types'
 import { Renderer, type Camera, type Palette } from '../gl/Renderer'
 import { Scene } from '../gl/Scene'
 import { hasTranslation } from '../i18n'
+import { Icon } from './Icon'
 import { useT } from '../i18n/useT'
 import { PlanTooltip, type TooltipTarget } from './PlanTooltip'
 import { useStore } from '../store/useStore'
@@ -46,6 +47,14 @@ function readPalette(): Palette {
 export function RadarView() {
     const canvasRef = useRef<HTMLCanvasElement | null>(null)
     const sceneRef = useRef<Scene>(new Scene())
+    /**
+     * Types switched off in the legend.
+     *
+     * <p>Held here rather than in the store: nothing outside this view needs it,
+     * and the scene reads it directly. Kept by qualified name, so it survives a
+     * schema reload and means the same thing after the modules are renumbered.
+     */
+    const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(new Set())
     // Camera lives in a ref: panning at 60 Hz must not re-render the tree.
     const cameraRef = useRef<Camera>({ centerX: 0, centerY: 0, metersPerPixel: 4 })
     const rendererRef = useRef<Renderer | null>(null)
@@ -73,6 +82,14 @@ export function RadarView() {
     // the operator wants the picture held still, and neither is visible here.
     const frozen = useStore((s) => s.vizFrozen)
     const setVizFrozen = useStore((s) => s.setVizFrozen)
+    const stepping = useStore((s) => s.stepping)
+    const setStepping = useStore((s) => s.setStepping)
+    /**
+     * Whether the picture is ageing. Two things can stop it, and they mean
+     * different things to the frame handler, but exactly the same thing to the
+     * clock -- so the clock reads this and nothing else.
+     */
+    const held = frozen || stepping
     /**
      * The clock the picture ages by, which is not the wall clock.
      *
@@ -95,13 +112,13 @@ export function RadarView() {
     // in exactly the same state.
     useEffect(() => {
         const clock = clockRef.current
-        if (frozen && clock.stoppedAt === null) {
+        if (held && clock.stoppedAt === null) {
             clock.stoppedAt = performance.now() - clock.offset
-        } else if (!frozen && clock.stoppedAt !== null) {
+        } else if (!held && clock.stoppedAt !== null) {
             clock.offset = performance.now() - clock.stoppedAt
             clock.stoppedAt = null
         }
-    }, [frozen])
+    }, [held])
 
     // Re-run on a theme change too: the catalog's colours are tuned for a dark
     // ground and have to be deepened for a pale one.
@@ -112,6 +129,10 @@ export function RadarView() {
             return () => cancelAnimationFrame(handle)
         }
     }, [schema, vizCatalog, theme])
+
+    useEffect(() => {
+        sceneRef.current.setHidden(hiddenTypes)
+    }, [hiddenTypes, schema, vizCatalog, theme])
 
     useEffect(() => {
         const canvas = canvasRef.current
@@ -295,6 +316,18 @@ export function RadarView() {
         camera.centerY += anchor.y - after.y
     }
 
+    /**
+     * Steps the zoom about the centre of the view, which is what a button can
+     * mean -- the wheel zooms about the cursor because there is a cursor to
+     * zoom about, and a button has no such point.
+     */
+    const stepZoom = (direction: 1 | -1) => {
+        const camera = cameraRef.current
+        const factor = direction > 0 ? 1 / 1.4 : 1.4
+        camera.metersPerPixel = Math.min(Math.max(camera.metersPerPixel * factor, 0.02), 20_000)
+        setHud((hud) => ({ ...hud, scale: camera.metersPerPixel }))
+    }
+
     const onPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
         const canvas = canvasRef.current!
         canvas.setPointerCapture(event.pointerId)
@@ -346,14 +379,40 @@ export function RadarView() {
                 <span>{t('viz.title')}</span>
                 <span className="flex items-center gap-2 normal-case tracking-normal">
                     <button className="btn text-micro py-0.5" onClick={fit} title={t('viz.fitTitle')}>
-                        {t('viz.fit')}
+                        <Icon name="fit" size={12} />{t('viz.fit')}
                     </button>
+                    <span className="inline-flex">
+                        <button
+                            className="btn text-micro py-0.5 px-2"
+                            onClick={() => stepZoom(1)}
+                            title={t('viz.zoomInTitle')}
+                            aria-label={t('viz.zoomIn')}
+                        >
+                            <Icon name="zoomIn" size={13} />
+                        </button>
+                        <button
+                            className="btn text-micro py-0.5 px-2 border-l-0"
+                            onClick={() => stepZoom(-1)}
+                            title={t('viz.zoomOutTitle')}
+                            aria-label={t('viz.zoomOut')}
+                        >
+                            <Icon name="zoomOut" size={13} />
+                        </button>
+                    </span>
                     <button
-                        className={`btn text-micro py-0.5 ${frozen ? 'btn-primary' : ''}`}
-                        onClick={() => setVizFrozen(!frozen)}
-                        title={t('viz.freezeTitle')}
+                        className={`btn text-micro py-0.5 ${held ? 'btn-primary' : ''}`}
+                        onClick={() => {
+                            if (held) {
+                                setVizFrozen(false)
+                                setStepping(false)
+                            } else {
+                                setVizFrozen(true)
+                            }
+                        }}
+                        title={stepping && !frozen ? t('viz.heldSteppingTitle') : t('viz.freezeTitle')}
                     >
-                        {frozen ? t('viz.frozen') : t('viz.live')}
+                        <Icon name={held ? 'freeze' : 'live'} size={11} />
+                        {held ? t('viz.frozen') : t('viz.live')}
                     </button>
                     <button
                         className="btn text-micro py-0.5"
@@ -423,14 +482,61 @@ export function RadarView() {
                 <PlanTooltip target={tooltip} bounds={canvasSize} />
             )}
 
+            {/* The legend is the filter. A busy scenario draws far more than an
+                operator can read at once, and the thing they want to isolate is
+                always named right here -- so naming it and switching it off are
+                the same gesture, and no second panel has to exist. */}
             <div className="absolute right-3 bottom-3 flex flex-col items-end gap-0.5 text-mini">
-                {legend.map((entry) => (
-                    <span key={entry.type} className="flex items-center gap-1.5 text-ink-300" title={entry.note ?? entry.type}>
-                        <span className="w-2 h-2 " style={{ background: entry.color }} />
-                        {entry.label}
-                        <span className="text-ink-500">{entry.kindLabel}</span>
-                    </span>
-                ))}
+                {legend.length > 1 && (
+                    <div className="flex items-center gap-2 mb-0.5 text-ink-500">
+                        <span>{t('viz.filter.title')}</span>
+                        <button
+                            className="link-button"
+                            disabled={hiddenTypes.size === 0}
+                            onClick={() => setHiddenTypes(new Set())}
+                            title={t('viz.filter.allTitle')}
+                        >
+                            {t('viz.filter.all')}
+                        </button>
+                        <button
+                            className="link-button"
+                            disabled={hiddenTypes.size === legend.length}
+                            onClick={() => setHiddenTypes(new Set(legend.map((e) => e.type)))}
+                            title={t('viz.filter.noneTitle')}
+                        >
+                            {t('viz.filter.none')}
+                        </button>
+                    </div>
+                )}
+                {legend.map((entry) => {
+                    const off = hiddenTypes.has(entry.type)
+                    return (
+                        <button
+                            key={entry.type}
+                            className={`flex items-center gap-1.5 text-left ${off ? 'text-ink-600' : 'text-ink-300'}`}
+                            title={t(off ? 'viz.filter.show' : 'viz.filter.hide', { type: entry.label })}
+                            aria-pressed={!off}
+                            onClick={() => setHiddenTypes((current) => {
+                                const next = new Set(current)
+                                if (!next.delete(entry.type)) next.add(entry.type)
+                                return next
+                            })}
+                        >
+                            <Icon name={off ? 'eyeOff' : 'eye'} size={11}
+                                className={off ? 'opacity-60' : 'opacity-0'} />
+                            <span
+                                className="w-2 h-2"
+                                style={{
+                                    background: off ? 'transparent' : entry.color,
+                                    boxShadow: off ? `inset 0 0 0 1px ${entry.color}` : undefined,
+                                    opacity: off ? 0.45 : 1,
+                                }}
+                            />
+                            <span className={off ? 'line-through decoration-1' : ''}>{entry.label}</span>
+                            <span className="text-ink-600">{entry.kindLabel}</span>
+                        </button>
+                    )
+                })}
             </div>
         </div>
     )

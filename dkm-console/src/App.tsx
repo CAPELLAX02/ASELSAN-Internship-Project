@@ -5,6 +5,8 @@ import { LogPanel } from './components/LogPanel'
 import { MessagePanel, type Selection } from './components/MessagePanel'
 import { RadarView } from './components/RadarView'
 import { LoadingSpinner } from './components/LoadingSpinner'
+import { ToastStack } from './components/Toast'
+import { TooltipLayer } from './components/TooltipLayer'
 import { TopBar } from './components/TopBar'
 import { Tour } from './components/Tour'
 import { useT } from './i18n/useT'
@@ -15,8 +17,6 @@ export default function App() {
     const ready = useStore((s) => s.ready)
     const fatal = useStore((s) => s.fatal)
     const bootstrap = useStore((s) => s.bootstrap)
-    const notice = useStore((s) => s.notice)
-    const dismissNotice = useStore((s) => s.dismissNotice)
     const schema = useStore((s) => s.schema)
     const theme = useStore((s) => s.theme)
 
@@ -27,12 +27,6 @@ export default function App() {
     useEffect(() => { applyTheme(theme) }, [theme])
 
     useEffect(() => { void bootstrap() }, [bootstrap])
-
-    useEffect(() => {
-        if (!notice || notice.level === 'ERROR') return
-        const timer = window.setTimeout(dismissNotice, 6000)
-        return () => window.clearTimeout(timer)
-    }, [notice, dismissNotice])
 
     if (fatal) {
         return (
@@ -104,27 +98,8 @@ export default function App() {
             </footer>
 
             <Tour />
-
-            {notice && (
-                <div className={`fixed bottom-4 left-1/2 -translate-x-1/2 max-w-2xl px-3 py-2  border
-                         shadow-lg backdrop-blur z-40 ${notice.level === 'ERROR'
-                        ? 'bg-danger/20 border-danger/60 text-danger'
-                        : notice.level === 'WARN'
-                            ? 'bg-caution/20 border-caution/60 text-caution'
-                            : 'bg-ink-800/95 border-ink-600 text-ink-200'
-                    }`}>
-                    <div className="flex items-start gap-3">
-                        <span className="min-w-0">{notice.message}</span>
-                        <button
-                            className="text-current opacity-60 hover:opacity-100 shrink-0"
-                            onClick={dismissNotice}
-                            aria-label="close"
-                        >
-                            &times;
-                        </button>
-                    </div>
-                </div>
-            )}
+            <ToastStack />
+            <TooltipLayer />
         </div>
     )
 }

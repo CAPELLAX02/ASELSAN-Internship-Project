@@ -4,6 +4,7 @@ import { api } from '../api/client'
 import type { MessagePage, MessageSummary, SortDir, SortKey, TraceRow } from '../api/types'
 import { useT, type Translate } from '../i18n/useT'
 import { useStore } from '../store/useStore'
+import { Icon } from './Icon'
 import { AlertDialog } from './AlertDialog'
 import { clockTime, count } from './format'
 import { LoadingOverlay, LoadingSpinner } from './LoadingSpinner'
@@ -52,7 +53,7 @@ export function MessagePanel({ selection, onSelect }: {
     const [status, setStatus] = useState('')
     const [sort, setSort] = useState<SortKey>('sequence')
     const [dir, setDir] = useState<SortDir>('asc')
-    const [timeMode, setTimeMode] = useState<TimeMode>('cumulative')
+    const [timeMode, setTimeMode] = useState<TimeMode>('delta')
     const [follow, setFollow] = useState(true)
     const [page, setPage] = useState<MessagePage | null>(null)
     const [trace, setTrace] = useState<TraceRow[]>([])
@@ -281,6 +282,17 @@ export function MessagePanel({ selection, onSelect }: {
         }
     }
 
+    const step = async (direction: 'undo' | 'redo') => {
+        const done = await run(
+            () => (direction === 'undo' ? api.undoSession() : api.redoSession()),
+            direction === 'undo' ? t('list.undo') : t('list.redo'))
+        if (done?.applied) {
+            touchSession()
+            notify('info', t(direction === 'undo' ? 'list.undone' : 'list.redone',
+                { what: done.label ?? '' }))
+        }
+    }
+
     const confirmRevert = async () => {
         const done = await run(() => api.revertSession(), t('list.revert'))
         setAskRevert(false)
@@ -460,12 +472,40 @@ export function MessagePanel({ selection, onSelect }: {
                     </div>
 
                     <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-ink-700 flex-wrap text-mini">
+                        {mode === 'input' && (
+                            <span className="inline-flex">
+                                <button
+                                    className="btn py-0.5 px-2 text-mini"
+                                    onClick={() => void step('undo')}
+                                    disabled={running || !page?.canUndo}
+                                    title={page?.undoLabel
+                                        ? t('list.undoWhat', { what: page.undoLabel })
+                                        : t('list.undoTitle')}
+                                    aria-label={t('list.undo')}
+                                >
+                                    <Icon name="undo" size={13} />
+                                </button>
+                                <button
+                                    className="btn py-0.5 px-2 text-mini border-l-0"
+                                    onClick={() => void step('redo')}
+                                    disabled={running || !page?.canRedo}
+                                    title={page?.redoLabel
+                                        ? t('list.redoWhat', { what: page.redoLabel })
+                                        : t('list.redoTitle')}
+                                    aria-label={t('list.redo')}
+                                >
+                                    <Icon name="redo" size={13} />
+                                </button>
+                            </span>
+                        )}
+
                         <button
                             className="btn py-0.5 text-mini"
                             onClick={resetFilters}
                             disabled={!filtersActive}
                             title={t('list.resetTitle')}
                         >
+                            <Icon name="filterOff" size={13} />
                             {t('list.reset')}
                         </button>
 
@@ -476,6 +516,7 @@ export function MessagePanel({ selection, onSelect }: {
                                 disabled={running || !page?.revertable || !page?.dirty}
                                 title={t('list.revertTitle')}
                             >
+                                <Icon name="revert" size={13} />
                                 {t('list.revert')}
                             </button>
                         )}
@@ -489,6 +530,7 @@ export function MessagePanel({ selection, onSelect }: {
                                 disabled={running || (page?.total ?? 0) === 0}
                                 title={t('list.clearTitle')}
                             >
+                                <Icon name="trash" size={13} />
                                 {t('list.clear')}
                             </button>
                         )}
@@ -796,8 +838,8 @@ function Row({
                     ${draggable ? 'cursor-grab active:cursor-grabbing' : ''}`}
             >
                 {draggable && (
-                    <span className="w-[3px] h-3 border-l border-r border-dotted border-ink-600
-                                     opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <Icon name="grip" size={11}
+                        className="text-ink-600 opacity-0 group-hover:opacity-100 transition-opacity" />
                 )}
             </span>
             <span className="w-20 shrink-0 truncate text-ink-500 tabular-nums">{shownTime}</span>

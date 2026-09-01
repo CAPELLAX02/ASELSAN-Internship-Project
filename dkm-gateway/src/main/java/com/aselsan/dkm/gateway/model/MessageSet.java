@@ -185,6 +185,40 @@ public final class MessageSet implements AutoCloseable {
         return entry;
     }
 
+    /**
+     * Replaces a stretch of the list with the given messages, keeping their
+     * original ids.
+     *
+     * <p>This is what undo and redo replay. Ids are preserved rather than
+     * reissued so that a selection, a library reference or a second undo still
+     * names the same message after the round trip -- an undo that silently
+     * renamed everything it restored would be a different list that merely
+     * looked like the old one.
+     */
+    public void splice(int at, int removeCount, long[] ids, List<byte[]> bodies, Origin origin) {
+        int from = Math.min(Math.max(at, 0), entries.size());
+        int count = Math.min(Math.max(removeCount, 0), entries.size() - from);
+        for (int i = 0; i < count; i++) {
+            entries.remove(from);
+        }
+        for (int i = 0; i < ids.length; i++) {
+            byte[] body = bodies.get(i);
+            MessageEntry entry = new MessageEntry(ids[i]);
+            entry.overlay = body;
+            entry.offset = -1;
+            entry.length = body.length;
+            entry.origin = origin;
+            MessageEntry described = describe(io.netty.buffer.Unpooled.wrappedBuffer(body), 0, body.length, origin);
+            entry.moduleId = described.moduleId;
+            entry.msgId = described.msgId;
+            entry.timestamp = described.timestamp;
+            entry.typeName = described.typeName;
+            entry.problem = described.problem;
+            entries.add(from + i, entry);
+        }
+        dirty = true;
+    }
+
     public boolean remove(long id) {
         for (int i = 0; i < entries.size(); i++) {
             if (entries.get(i).id == id) {

@@ -40,6 +40,10 @@ export const api = {
     /** `from` starts the run at that message instead of the first (FR-11). */
     start: (fromMessageId = 0) => request<PlaybackSnapshot>(
         `/api/playback/start${fromMessageId ? `?from=${fromMessageId}` : ''}`, { method: 'POST' }),
+    /** FR-11: send the next `count` messages, then wait. */
+    step: (count = 1, fromMessageId = 0) => request<PlaybackSnapshot & { stepped: number }>(
+        `/api/playback/step?count=${count}${fromMessageId ? `&from=${fromMessageId}` : ''}`,
+        { method: 'POST' }),
     pause: () => request<PlaybackSnapshot>('/api/playback/pause', { method: 'POST' }),
     resume: () => request<PlaybackSnapshot>('/api/playback/resume', { method: 'POST' }),
     stop: (rewind: boolean) =>
@@ -73,6 +77,11 @@ export const api = {
         request<{ messages: number; bytes: number; notes: string[]; problems: string[] }>(
             '/api/session/load-path', { method: 'POST', body: json({ path }) }),
     clearSession: () => request<{ total: number }>('/api/session/clear', { method: 'POST' }),
+    /** FR-8/FR-9: step back and forward through what was changed. */
+    undoSession: () => request<{ applied: boolean; label: string | null }>(
+        '/api/session/undo', { method: 'POST' }),
+    redoSession: () => request<{ applied: boolean; label: string | null }>(
+        '/api/session/redo', { method: 'POST' }),
     /** Drops every edit since the load and reads the file back in. */
     revertSession: () => request<{ messages: number; bytes: number }>(
         '/api/session/revert', { method: 'POST' }),

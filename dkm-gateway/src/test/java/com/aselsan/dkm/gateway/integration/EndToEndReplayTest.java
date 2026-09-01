@@ -147,6 +147,111 @@ class EndToEndReplayTest {
     }
 
     @Test
+    @DisplayName("stepping sends exactly one message at a time and a later run picks up where it left off")
+    void stepsOneMessageAtATime() throws Exception {
+        assumeTrue(mockInput() != null, "input.bin not present in this checkout");
+        awaitListening();
+
+        try (FakeDkm dkm = newDkm()) {
+            dkm.connect("RSP", HOST, RSP_PORT);
+            dkm.connect("RSM", HOST, RSM_PORT);
+            dkm.connect("CRM", HOST, CRM_PORT);
+
+            loadSampleInput();
+
+            // The reason this control exists: a message can be small on the wire
+            // and still cost the DKM minutes of work. A paced run would send the
+            // next one regardless, so stepping has to hand over exactly one and
+            // then stop, however long the operator takes to look at the result.
+            Api.Result first = api.post("/api/playback/step?count=1");
+            assertEquals(200, first.status(), first.raw());
+            assertEquals(1, first.at("/stepped").asInt());
+            assertEquals("PAUSED", first.at("/state").asText(),
+                    "after a step the run is held, not running");
+
+            assertTrue(dkm.awaitMessages(1, 5000), "the first message should have gone out");
+            Thread.sleep(200);
+            assertEquals(1, dkm.received().size(), "and nothing should follow it on its own");
+
+            assertEquals(3, api.post("/api/playback/step?count=3").at("/stepped").asInt());
+            assertTrue(dkm.awaitMessages(4, 5000));
+            Thread.sleep(200);
+            assertEquals(4, dkm.received().size());
+
+            // Stepping and running share one cursor, so starting now continues the
+            // scenario rather than replaying the four already delivered.
+            assertEquals(200, api.put("/api/playback/speed", "{\"speed\": 50}").status());
+            assertEquals(200, api.post("/api/playback/start").status());
+            assertTrue(dkm.awaitMessages(9, 10_000),
+                    "expected the remaining messages, got " + dkm.received().size());
+            Thread.sleep(250);
+            assertEquals(9, dkm.received().size(), "nine sendable messages in total, none twice");
+            assertEquals(9, api.get("/api/playback").body().path("sent").asInt());
+        }
+    }
+
+    @Test
+    @DisplayName("a file loaded between two steps ends the old run instead of stepping into freed memory")
+    void steppingSurvivesTheSetBeingReplaced() throws Exception {
+        assumeTrue(mockInput() != null, "input.bin not present in this checkout");
+        awaitListening();
+
+        try (FakeDkm dkm = newDkm()) {
+            dkm.connect("RSP", HOST, RSP_PORT);
+            dkm.connect("RSM", HOST, RSM_PORT);
+            dkm.connect("CRM", HOST, CRM_PORT);
+
+            loadSampleInput();
+            assertEquals(2, api.post("/api/playback/step?count=2").at("/stepped").asInt());
+
+            // The plan is derived from the sent markers, never held across a step.
+            // Holding one meant the arena it pointed into could be replaced under
+            // it, and the next step read from bytes that no longer existed.
+            loadSampleInput();
+            Api.Result after = api.post("/api/playback/step?count=1");
+            assertEquals(200, after.status(), after.raw());
+            assertEquals(1, after.at("/stepped").asInt());
+            assertEquals(1, after.at("/sent").asInt(),
+                    "loading a set ends the run that was reading the previous one");
+        }
+    }
+
+    @Test
+    @DisplayName("stepping from a chosen message treats everything before it as already sent")
+    void stepsFromAChosenMessage() throws Exception {
+        assumeTrue(mockInput() != null, "input.bin not present in this checkout");
+        awaitListening();
+
+        try (FakeDkm dkm = newDkm()) {
+            dkm.connect("RSP", HOST, RSP_PORT);
+            dkm.connect("RSM", HOST, RSM_PORT);
+            dkm.connect("CRM", HOST, CRM_PORT);
+
+            loadSampleInput();
+            JsonNode rows = api.get("/api/session/messages?offset=0&limit=10").body().path("items");
+            // The fifth sendable message, so there is something in front of it to skip.
+            long chosen = rows.get(4).path("id").asLong();
+            long chosenTimestamp = rows.get(4).path("timestamp").asLong();
+
+            Api.Result stepped = api.post("/api/playback/step?count=1&from=" + chosen);
+            assertEquals(200, stepped.status(), stepped.raw());
+            assertEquals(1, stepped.at("/stepped").asInt());
+
+            assertTrue(dkm.awaitMessages(1, 5000));
+            Thread.sleep(200);
+            assertEquals(1, dkm.received().size(), "exactly the chosen message, not the four before it");
+            assertEquals(chosenTimestamp, dkm.received().get(0).timestamp(),
+                    "and it is the one that was chosen");
+
+            JsonNode listed = api.get("/api/session/messages?offset=0&limit=10").body().path("items");
+            for (int i = 0; i < 4; i++) {
+                assertTrue(listed.get(i).path("sent").asBoolean(),
+                        "message " + i + " sits before the chosen one and counts as sent");
+            }
+        }
+    }
+
+    @Test
     @DisplayName("pause keeps the run and its state, and only pending messages stay editable")
     void pauseEditResume() throws Exception {
         assumeTrue(mockInput() != null, "input.bin not present in this checkout");

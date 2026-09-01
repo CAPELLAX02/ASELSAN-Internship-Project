@@ -265,7 +265,7 @@ public class CaptureService implements InboundSink {
             lock.unlock();
         }
         viz.resetScene();
-        events.info("capture", "capture cleared");
+        events.info("capture", "capture cleared", "log.capture.cleared", java.util.Map.of());
         events.publish("capture", data -> {
             data.put("total", 0);
             data.put("cleared", true);

@@ -61,6 +61,9 @@ interface Track {
     vx: number
     vy: number
     fromOutput: boolean
+    /** Which message type last extended this track, for the legend filter. */
+    link: number
+    msgId: number
 }
 
 interface Area {
@@ -172,6 +175,10 @@ export class Scene {
      * cursor needs values the renderer has no use for.
      */
     private readonly pointInfo = new Int32Array(MAX_POINTS * 3)   // link | msgId | trackId
+    /** Each point's size as drawn when visible, so hiding is reversible. */
+    private readonly pointSize = new Uint8Array(MAX_POINTS)
+    /** Style keys the operator has switched off in the legend. */
+    private hidden = new Set<number>()
     private readonly pointGeo = new Float32Array(MAX_POINTS * 4)  // distance, heading, vx, vy
     pointHead = 0
     pointCount = 0
@@ -261,6 +268,39 @@ export class Scene {
 
     private styleFor(link: number, msgId: number) {
         return this.palette.get(this.styleKey(link, msgId))
+    }
+
+    /**
+     * Sets which message types are drawn.
+     *
+     * <p>Filtered at draw time rather than on the way in, so switching a type
+     * back on brings its history with it. A busy scenario is unreadable with
+     * everything on at once, and an operator who has to wait for a type to be
+     * re-announced before seeing it again would learn not to use the control.
+     *
+     * <p>Points live in a GPU-bound ring, so they are hidden by zeroing the size
+     * the shader reads -- one pass over the ring when the filter changes, and
+     * nothing at all per frame. Everything else is rebuilt per frame anyway and
+     * is simply skipped there.
+     */
+    setHidden(types: Iterable<string>) {
+        const wanted = new Set(types)
+        this.hidden = new Set(
+            [...this.typeNames.entries()]
+                .filter(([, name]) => wanted.has(name))
+                .map(([key]) => key),
+        )
+        for (let i = 0; i < MAX_POINTS; i++) {
+            const info = i * 3
+            const key = this.styleKey(this.pointInfo[info] & 0xff, this.pointInfo[info + 1])
+            this.points[i * POINT_STRIDE + 6] = this.hidden.has(key) ? 0 : this.pointSize[i]
+        }
+        this.dirtyFrom = 0
+        this.dirtyCount = MAX_POINTS
+    }
+
+    isHidden(link: number, msgId: number): boolean {
+        return this.hidden.has(this.styleKey(link, msgId))
     }
 
     /** Decodes one binary frame. Called straight from the WebSocket handler. */
@@ -398,7 +438,8 @@ export class Scene {
         this.points[base + 3] = color[1]
         this.points[base + 4] = color[2]
         this.points[base + 5] = now
-        this.points[base + 6] = size
+        this.pointSize[this.pointHead] = size
+        this.points[base + 6] = this.hidden.has(this.styleKey(link, msgId)) ? 0 : size
 
         if (this.dirtyCount === 0) this.dirtyFrom = this.pointHead
         this.dirtyCount = Math.min(this.dirtyCount + 1, MAX_POINTS)
@@ -419,7 +460,7 @@ export class Scene {
                 xs: new Float32Array(TRACK_CAPACITY),
                 ys: new Float32Array(TRACK_CAPACITY),
                 count: 0, head: 0, color, lastSeen: now,
-                lastX: x, lastY: y, vx, vy, fromOutput,
+                lastX: x, lastY: y, vx, vy, fromOutput, link, msgId,
             }
             this.tracks.set(id, track)
         }
@@ -433,6 +474,8 @@ export class Scene {
         track.vx = vx
         track.vy = vy
         track.color = color
+        track.link = link
+        track.msgId = msgId
         // A track is still a point on the display; the connecting line is what
         // makes it a track (FR-27).
         this.addPoint(x, y, color, now, 7, link, msgId, id,
@@ -484,8 +527,9 @@ export class Scene {
      *
      * <p>Marks win over lines, and lines over areas: a detection sitting inside a
      * reporting area is almost always the thing being pointed at, and an area is
-     * large enough to be hit anywhere else. Faded marks are skipped, because
-     * something invisible should not answer to the cursor.
+     * large enough to be hit anywhere else. Faded marks are skipped, and so are
+     * types switched off in the legend: something invisible should not answer to
+     * the cursor.
      */
     pick(x: number, y: number, tolerance: number, now: number): PickResult | null {
         let bestIndex = -1
@@ -494,7 +538,7 @@ export class Scene {
         for (let i = 0; i < this.pointCount; i++) {
             const base = i * POINT_STRIDE
             const birth = this.points[base + 5]
-            if (now - birth > this.pointLifetimeMs) {
+            if (now - birth > this.pointLifetimeMs || this.points[base + 6] === 0) {
                 continue
             }
             const dx = this.points[base] - x
@@ -532,7 +576,8 @@ export class Scene {
         for (const list of [this.rays, this.lines]) {
             for (let i = list.length - 1; i >= 0; i--) {
                 const segment = list[i]
-                if (now - segment.birth > segment.lifetime) {
+                if (now - segment.birth > segment.lifetime
+                    || this.isHidden(segment.link, segment.msgId)) {
                     continue
                 }
                 if (distanceToSegment(x, y, segment.x1, segment.y1, segment.x2, segment.y2) <= tolerance) {
@@ -551,6 +596,7 @@ export class Scene {
         const range = Math.hypot(x, y)
         const bearing = Math.atan2(y, x)
         for (const area of this.sectors.values()) {
+            if (this.isHidden(area.link, area.msgId)) continue
             const r0 = Math.min(area.a, area.b)
             const r1 = Math.max(area.a, area.b)
             const h0 = Math.min(area.c, area.d)
@@ -575,6 +621,7 @@ export class Scene {
         // actually reaching for. The border is the part that carries the
         // information anyway: where the inclusion test starts and stops.
         for (const area of this.rects.values()) {
+            if (this.isHidden(area.link, area.msgId)) continue
             const x0 = Math.min(area.a, area.b)
             const x1 = Math.max(area.a, area.b)
             const y0 = Math.min(area.c, area.d)

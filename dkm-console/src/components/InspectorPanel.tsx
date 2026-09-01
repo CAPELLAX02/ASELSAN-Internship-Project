@@ -4,11 +4,15 @@ import { api } from '../api/client'
 import type { MessageDetail } from '../api/types'
 import { useT, type Translate } from '../i18n/useT'
 import { useStore } from '../store/useStore'
+import { Icon } from './Icon'
+import { AlertDialog } from './AlertDialog'
 import { FieldEditor, type FieldPath } from './FieldEditor'
 import { LibraryPanel } from './LibraryPanel'
 import { LoadingLine, LoadingSpinner } from './LoadingSpinner'
+import { PromptDialog } from './PromptDialog'
 import { Segmented } from './Switch'
-import { clockTime } from './format'
+import { usePlacementCheck, type Placement } from './usePlacementCheck'
+import { clockTime, count } from './format'
 import type { Selection } from './MessagePanel'
 
 type Tab = 'message' | 'new' | 'library'
@@ -100,6 +104,8 @@ function MessageInspector({ selection, onSelect }: {
     const [busy, setBusy] = useState(false)
     const [loading, setLoading] = useState(false)
     const [loadError, setLoadError] = useState<string | null>(null)
+    const [askSave, setAskSave] = useState(false)
+    const [askRetime, setAskRetime] = useState(false)
 
     const load = useCallback(async () => {
         if (!selection) {
@@ -181,18 +187,17 @@ function MessageInspector({ selection, onSelect }: {
         }
     }
 
-    const saveToLibrary = async () => {
-        const name = window.prompt(t('inspector.savePrompt'), `${detail.type} #${detail.id}`)
-        if (!name) return
+    const saveToLibrary = async (name: string) => {
+        setAskSave(false)
+        if (!name.trim()) return
         setBusy(true)
         const saved = await run(() => api.saveToLibrary(detail.id, { name }), t('inspector.toLibrary'))
         setBusy(false)
-        if (saved) notify('INFO', t('inspector.saved', { name: saved.name }))
+        if (saved) notify('success', t('inspector.saved', { name: saved.name }))
     }
 
-    const retime = async () => {
-        const next = window.prompt(t('inspector.retimePrompt'), String(detail.timestamp))
-        if (next === null) return
+    const retime = async (next: string) => {
+        setAskRetime(false)
         const value = Number(next)
         if (!Number.isFinite(value)) return
         setBusy(true)
@@ -235,10 +240,44 @@ function MessageInspector({ selection, onSelect }: {
             </div>
 
             {detail.problem && (
-                <div className=" border border-danger/50 bg-danger/10 text-danger px-2 py-1.5">
+                <div className="border border-danger/50 bg-danger/10 text-danger px-2 py-1.5">
                     {detail.problem}
                 </div>
             )}
+
+            <PromptDialog
+                open={askSave}
+                title={t('inspector.toLibrary')}
+                body={t('inspector.savePrompt')}
+                label={t('library.nameLabel')}
+                initial={`${detail.type ?? detail.msgId} #${detail.id}`}
+                confirmLabel={t('inspector.toLibrary')}
+                busy={busy}
+                validate={(value) => (value.trim() ? null : t('library.nameRequired'))}
+                onConfirm={(value) => void saveToLibrary(value)}
+                onCancel={() => setAskSave(false)}
+            />
+
+            <PromptDialog
+                open={askRetime}
+                kind="number"
+                title={t('inspector.retime')}
+                body={t('inspector.retimePrompt')}
+                hint={t('inspector.retimeHint')}
+                label={t('inspector.retimeLabel')}
+                unit="ms"
+                initial={String(detail.timestamp)}
+                confirmLabel={t('inspector.retime')}
+                busy={busy}
+                validate={(value) => {
+                    const parsed = Number(value)
+                    if (!Number.isFinite(parsed)) return t('inspector.retimeNaN')
+                    if (parsed < 0) return t('inspector.retimeNegative')
+                    return null
+                }}
+                onConfirm={(value) => void retime(value)}
+                onCancel={() => setAskRetime(false)}
+            />
 
             {readOnlyReason && !detail.problem && (
                 <div className=" border border-ink-600 bg-ink-850 text-ink-400 px-2 py-1.5">
@@ -262,25 +301,25 @@ function MessageInspector({ selection, onSelect }: {
                 <button className="btn btn-primary flex items-center gap-1.5"
                     disabled={readOnly || !dirty || busy} onClick={apply}>
                     {busy && <LoadingSpinner size={12} />}
-                    {t('inspector.apply')}
+                    <Icon name="check" size={12} />{t('inspector.apply')}
                 </button>
                 <button className="btn" disabled={!dirty || busy}
                     onClick={() => setDraft((detail.payload ?? {}) as Record<string, unknown>)}>
-                    {t('inspector.revert')}
+                    <Icon name="revert" size={12} />{t('inspector.revert')}
                 </button>
                 <div className="flex-1" />
                 {!isCapture && (
                     <>
-                        <button className="btn" disabled={readOnly || busy} onClick={retime}
+                        <button className="btn" disabled={readOnly || busy} onClick={() => setAskRetime(true)}
                             title={t('inspector.retimeTitle')}>
-                            {t('inspector.retime')}
+                            <Icon name="clock" size={11} />{t('inspector.retime')}
                         </button>
-                        <button className="btn" disabled={!detail.decodable || busy} onClick={saveToLibrary}
+                        <button className="btn" disabled={!detail.decodable || busy} onClick={() => setAskSave(true)}
                             title={t('inspector.toLibraryTitle')}>
-                            {t('inspector.toLibrary')}
+                            <Icon name="bookmark" size={11} />{t('inspector.toLibrary')}
                         </button>
                         <button className="btn btn-danger" disabled={detail.sent || running || busy} onClick={remove}>
-                            {t('inspector.delete')}
+                            <Icon name="trash" size={11} />{t('inspector.delete')}
                         </button>
                     </>
                 )}
@@ -339,6 +378,8 @@ function NewMessageForm({ selection }: { selection: Selection | null }) {
      * message" is checkable against what they can see in the list.
      */
     const [placement, setPlacement] = useState<'after' | 'end'>('after')
+    const [verdict, setVerdict] = useState<Placement | null>(null)
+    const checkPlacement = usePlacementCheck()
 
     const typeName = chosenType ?? stimulusTypes[0]?.qualifiedName ?? ''
 
@@ -359,7 +400,21 @@ function NewMessageForm({ selection }: { selection: Selection | null }) {
 
     const type = stimulusTypes.find((m) => m.qualifiedName === typeName) ?? null
 
+    // Item 7's rule, at the one point where the operator can break it: the list
+    // is always ascending, so an insert either lands where they asked or they
+    // are told where it will land instead.
     const insert = async () => {
+        if (!type) return
+        const anchor = placement === 'after' && canPlaceAfter ? selectedIndex : null
+        const check = await checkPlacement(anchor, offsetMillis)
+        if (check.verdict !== 'ok') {
+            setVerdict(check)
+            return
+        }
+        void commit()
+    }
+
+    const commit = async () => {
         if (!type) return
         setBusy(true)
         const inserted = await run(
@@ -425,6 +480,34 @@ function NewMessageForm({ selection }: { selection: Selection | null }) {
                     <span className="block text-ink-500 mt-1">{t('new.offsetHint')}</span>
                 </span>
             </label>
+
+            <AlertDialog
+                open={verdict !== null}
+                tone={verdict?.verdict === 'negative' ? 'danger' : 'caution'}
+                title={verdict?.verdict === 'negative'
+                    ? t('dialog.negativeTitle') : t('dialog.placeTitle')}
+                body={verdict?.verdict === 'negative'
+                    ? t('dialog.negativeBody', { offset: count(verdict.offsetMillis) })
+                    : t('dialog.placeBody', {
+                        offset: count(offsetMillis),
+                        index: count((selectedIndex ?? 0) + 1),
+                        timestamp: count(verdict?.verdict === 'reordered' ? verdict.timestamp : 0),
+                        next: count(verdict?.verdict === 'reordered' ? verdict.nextTimestamp : 0),
+                    })}
+                detail={verdict?.verdict === 'reordered'
+                    ? t('dialog.placeHint', { max: count(verdict.maxOffsetMillis) })
+                    : null}
+                confirmLabel={verdict?.verdict === 'negative'
+                    ? t('dialog.negativeConfirm') : t('dialog.placeConfirm')}
+                cancelLabel={verdict?.verdict === 'negative' ? undefined : t('dialog.startBack')}
+                busy={busy}
+                onConfirm={() => {
+                    const kind = verdict?.verdict
+                    setVerdict(null)
+                    if (kind === 'reordered') void commit()
+                }}
+                onCancel={() => setVerdict(null)}
+            />
 
             {schema && type && (
                 <div className="border-t border-ink-700 pt-3">

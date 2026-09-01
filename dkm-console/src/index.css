@@ -28,6 +28,21 @@
     --c-grid: #3d3733;
     --c-axis: #5a524c;
 
+    /* A toast is deliberately the opposite of the surface behind it: a pale
+       card on the dark console, a dark one on the light. It is the only thing
+       on screen that is not part of the instrument, and reading as a different
+       object is exactly what makes it noticed and then ignored again. Its
+       accents come from the other theme's set, because an accent tuned to glow
+       on black disappears on white. */
+    --c-toast-bg: #f4f2f0;
+    --c-toast-fg: #17130f;
+    --c-toast-mute: #6b635c;
+    --c-toast-line: #cfc8c2;
+    --c-toast-success: #1a6b3c;
+    --c-toast-info: #0e6a7c;
+    --c-toast-warning: #8a5200;
+    --c-toast-error: #a72a20;
+
     --shadow-panel: 0 1px 2px #0006, 0 12px 32px -24px #000a;
     color-scheme: dark;
 }
@@ -86,11 +101,29 @@
     --c-grid: #c0b8b1;
     --c-axis: #8f8781;
 
+    --c-toast-bg: #14110f;
+    --c-toast-fg: #f6f4f2;
+    --c-toast-mute: #a49b93;
+    --c-toast-line: #3d3835;
+    --c-toast-success: #5fd689;
+    --c-toast-info: #5ad8ec;
+    --c-toast-warning: #f0ad45;
+    --c-toast-error: #f5776b;
+
     --shadow-panel: 0 1px 2px #17130f0f, 0 12px 28px -22px #17130f38;
     color-scheme: light;
 }
 
 @theme inline {
+    --color-toast-bg: var(--c-toast-bg);
+    --color-toast-fg: var(--c-toast-fg);
+    --color-toast-mute: var(--c-toast-mute);
+    --color-toast-line: var(--c-toast-line);
+    --color-toast-success: var(--c-toast-success);
+    --color-toast-info: var(--c-toast-info);
+    --color-toast-warning: var(--c-toast-warning);
+    --color-toast-error: var(--c-toast-error);
+
     --color-ink-950: var(--c-950);
     --color-ink-900: var(--c-900);
     --color-ink-850: var(--c-850);
@@ -110,6 +143,7 @@
     --color-good: var(--c-good);
     --color-track: var(--c-track);
 
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     --font-sans: Arial, "Helvetica Neue", Helvetica, "Liberation Sans", sans-serif;
 
     --text-micro: 11px;
@@ -171,6 +205,29 @@ input[type="number"] {
     background: transparent;
 }
 
+/* Selection uses the accent, so highlighting a value in a dense table does not
+   drop a browser-blue block into a warm-neutral interface. */
+::selection {
+    background: var(--c-signal);
+    color: var(--c-950);
+}
+
+/* Anything you can press says so. */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+[role="radio"]:not(:disabled),
+[role="switch"]:not(:disabled),
+summary,
+select:not(:disabled),
+label:has(> input[type="checkbox"]) {
+    cursor: pointer;
+}
+
+button:disabled,
+select:disabled {
+    cursor: not-allowed;
+}
+
 input[type="range"] {
     accent-color: var(--c-signal);
 }
@@ -179,6 +236,29 @@ input[type="range"] {
     outline: 2px solid var(--c-signal);
     outline-offset: 1px;
     border-radius: 0;
+}
+
+/* Toasts arrive from above the top edge, which is where they come from. */
+/* Cards behind the front one glide into their new depth rather than jumping
+   there when the stack shifts. */
+.toast-settle {
+    transition: transform 180ms ease-out, opacity 180ms ease-out;
+}
+
+@keyframes toast-in {
+    from {
+        opacity: 0;
+        transform: translateY(-14px);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+.toast-in {
+    animation: toast-in 180ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 
 /* The one spinner. */
@@ -237,8 +317,12 @@ input[type="range"] {
         @apply px-3 py-2 text-mini uppercase tracking-[0.12em] font-semibold text-ink-300 bg-ink-850 border-b border-ink-700 flex items-center justify-between shrink-0 gap-3;
     }
 
+    /* Inline-flex so a button holding an icon and a word lays them out on one
+       baseline without every call site repeating the same three classes. A
+       text-only button is unaffected: one child centres exactly as before. */
     .btn {
-        @apply px-3 py-1 border border-ink-600 bg-ink-800 text-ink-200
+        @apply inline-flex items-center justify-center gap-1.5
+               px-3 py-1 border border-ink-600 bg-ink-800 text-ink-200
                hover:bg-ink-700 hover:border-ink-400 hover:text-ink-100
                active:bg-ink-850
                disabled:opacity-30 disabled:pointer-events-none
@@ -291,4 +375,27 @@ input[type="range"] {
     .badge-capture {
         @apply border-signal/45 text-signal bg-signal/12;
     }
+}
+/*
+ * A control that is a word, not a box. For the two or three places where a
+ * button sits inside running text -- legend headers, footers -- and a bordered
+ * control would weigh more than the thing it does.
+ */
+.link-button {
+    color: var(--color-ink-400);
+    text-decoration: underline;
+    text-decoration-color: var(--color-ink-700);
+    text-underline-offset: 2px;
+    cursor: pointer;
+}
+
+.link-button:hover:not(:disabled) {
+    color: var(--color-signal);
+    text-decoration-color: var(--color-signal);
+}
+
+.link-button:disabled {
+    color: var(--color-ink-700);
+    text-decoration: none;
+    cursor: default;
 }

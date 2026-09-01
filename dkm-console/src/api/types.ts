@@ -144,6 +144,10 @@ export interface MessagePage {
     dirty?: boolean
     /** Stimulus only: there is a loaded file to go back to. */
     revertable?: boolean
+    canUndo?: boolean
+    canRedo?: boolean
+    undoLabel?: string | null
+    redoLabel?: string | null
     sort?: SortKey
     dir?: SortDir
     total: number
@@ -197,6 +201,9 @@ export interface PlaybackSnapshot {
 
 export interface LogLine {
     seq: number
+    /** Present when the gateway offered a translation for this line. */
+    key?: string
+    params?: Record<string, string | number>
     t: number
     level: 'INFO' | 'WARN' | 'ERROR'
     source: string

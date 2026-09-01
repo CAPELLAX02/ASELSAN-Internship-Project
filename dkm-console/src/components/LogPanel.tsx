@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import type { LinkTelemetry } from '../api/types'
 import { useT, type Translate } from '../i18n/useT'
+import { hasTranslation } from '../i18n'
 import { useStore } from '../store/useStore'
 import { bytes, clockTime, count, rate } from './format'
 
@@ -75,7 +76,13 @@ export function LogPanel() {
                     <div key={line.seq} className="flex gap-2 leading-5">
                         <span className="text-ink-600 shrink-0">{clockTime(line.t)}</span>
                         <span className="w-16 shrink-0 text-ink-500 truncate">{line.source}</span>
-                        <span className={`${LEVEL_TONE[line.level] ?? 'text-ink-400'} min-w-0`}>{line.message}</span>
+                        <span className={`${LEVEL_TONE[line.level] ?? 'text-ink-400'} min-w-0`}>
+                {/* The gateway sends its own English text and, where it has one,
+                    a key. Falling back to the text means a message the console
+                    has no translation for still says something rather than
+                    disappearing behind a missing key. */}
+                {line.key && hasTranslation(line.key) ? t(line.key as never, line.params) : line.message}
+            </span>
                     </div>
                 ))}
                 {filtered.length === 0 && <div className="text-ink-600">{t('log.empty')}</div>}

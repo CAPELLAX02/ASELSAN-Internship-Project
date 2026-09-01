@@ -23,7 +23,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 
@@ -59,6 +61,9 @@ public class SessionService {
      * file is the cheapest place.
      */
     private Path original;
+
+    /** Undo and redo for everything the operator does to the set (FR-8, FR-9). */
+    private final EditHistory history = new EditHistory();
 
     @PostConstruct
     void init() {
@@ -106,9 +111,12 @@ public class SessionService {
         lock.lock();
         try {
             rememberOriginal(buf, name);
+            history.clear();
             MessageSet.ParseResult result = messages.adopt(buf, name);
             events.info("session", "loaded " + result.messages() + " message(s) from " + name
-                    + " (" + result.bytesConsumed() + " bytes)");
+                    + " (" + result.bytesConsumed() + " bytes)",
+                    "log.session.loaded",
+                    Map.of("count", result.messages(), "name", name, "bytes", result.bytesConsumed()));
             for (String note : result.notes()) {
                 events.warn("session", name + ": " + note);
             }
@@ -152,7 +160,8 @@ public class SessionService {
         String name = read(() -> messages.sourceName());
         try (InputStream in = Files.newInputStream(snapshot)) {
             MessageSet.ParseResult result = load(in, name, Files.size(snapshot));
-            events.info("session", "reverted to " + name + " as loaded; every edit since was dropped");
+            events.info("session", "reverted to " + name + " as loaded; every edit since was dropped",
+                    "log.session.reverted", Map.of("name", name));
             return result;
         }
     }
@@ -178,6 +187,7 @@ public class SessionService {
         lock.lock();
         try {
             messages.clear();
+            history.clear();
             publishReloaded();
         } finally {
             lock.unlock();
@@ -212,7 +222,10 @@ public class SessionService {
                     codec.senderId(target, 0), codec.receiverId(target, 0),
                     type.msgId, codec.timestamp(target, 0), updated.length);
 
+            int at = messages.indexOf(id);
+            List<EditHistory.Entry> before = capture(at, at + 1);
             messages.replace(entry, updated);
+            history.record(new EditHistory.Step("edit " + entry.typeName, at, before, capture(at, at + 1)));
             publishChanged(entry, "edited");
             return entry;
         } finally {
@@ -238,9 +251,13 @@ public class SessionService {
 
             byte[] bytes = build(type, timestamp, payload);
             MessageEntry entry = messages.insertAt(at, bytes, origin);
+            history.record(new EditHistory.Step("insert " + type.qualifiedName, at,
+                    List.of(), capture(at, at + 1)));
             events.info("session", "inserted " + type.qualifiedName + " at position " + at
                     + " with timestamp " + timestamp + " ms (" + (offsetMillis >= 0 ? "+" : "")
-                    + offsetMillis + " ms relative to its predecessor)");
+                    + offsetMillis + " ms relative to its predecessor)",
+                    "log.session.inserted", Map.of("type", type.qualifiedName, "index", at + 1,
+                            "timestamp", timestamp, "offset", offsetMillis));
             publishChanged(entry, "inserted");
             return entry;
         } finally {
@@ -286,8 +303,11 @@ public class SessionService {
             if (entry.sent) {
                 throw new IllegalStateException("message " + id + " has already been sent and cannot be removed");
             }
+            int at = messages.indexOf(id);
+            List<EditHistory.Entry> before = capture(at, at + 1);
             boolean removed = messages.remove(id);
             if (removed) {
+                history.record(new EditHistory.Step("delete " + entry.typeName, at, before, List.of()));
                 publishChanged(entry, "deleted");
             }
             return removed;
@@ -301,6 +321,23 @@ public class SessionService {
      *
      * <p>A sent message cannot be moved for the same reason it cannot be edited:
      * it is history, and history that reorders itself is not history.
+     *
+     * @return the index it ended up at
+     */
+    /**
+     * Moves a pending message to another position (FR-9).
+     *
+     * <p>What travels with the message is its gap from the message before it,
+     * not its absolute timestamp. A recording is a sequence of intervals: a
+     * detection two milliseconds after its beam is two milliseconds after its
+     * beam wherever that pair ends up. Carrying the absolute timestamp instead
+     * would make a moved message adopt whatever moment its new slot happened to
+     * hold, which is a different recording, not a reordered one.
+     *
+     * <p>Absolutes are then re-derived as a running sum. Because addition does
+     * not care about order, the totals past the moved range come out unchanged
+     * on their own -- so only the messages between the old and new positions are
+     * rewritten, however long the list is.
      *
      * @return the index it ended up at
      */
@@ -320,35 +357,152 @@ public class SessionService {
             if (from < 0) {
                 return -1;
             }
+            if (from == to) {
+                return to;
+            }
 
-            // The timestamps belong to the positions, not to the messages. A
-            // recording runs in ascending time, so if a moved message carried its
-            // own timestamp with it the list would come back out of order and the
-            // replay clock would send it at the wrong moment. Taking the slice's
-            // timestamps before the move and writing them back afterwards keeps
-            // the timeline exactly as it was and changes only what goes out when.
             int low = Math.min(from, to);
             int high = Math.max(from, to);
-            long[] schedule = new long[high - low + 1];
-            for (int i = low; i <= high; i++) {
-                schedule[i - low] = list.get(i).timestamp;
+            List<EditHistory.Entry> before = capture(low, high + 1);
+
+            // Each message's own gap, captured before anything moves.
+            long[] gaps = new long[list.size()];
+            for (int i = 0; i < list.size(); i++) {
+                gaps[i] = i == 0 ? list.get(i).timestamp
+                        : Math.max(0, list.get(i).timestamp - list.get(i - 1).timestamp);
             }
+            long[] carried = new long[high - low + 1];
+            for (int i = low; i <= high; i++) {
+                carried[i - low] = gaps[i];
+            }
+            // The gaps travel with their messages through the same reorder.
+            long moved = carried[from - low];
+            long[] reordered = new long[carried.length];
+            int write = 0;
+            for (int i = 0; i < carried.length; i++) {
+                if (i + low == from) continue;
+                if (write + low == to) reordered[write++] = moved;
+                reordered[write++] = carried[i];
+            }
+            if (write < reordered.length) reordered[write] = moved;
 
             int at = messages.move(id, to);
             if (at < 0) {
                 return -1;
             }
+
+            long running = low == 0 ? 0 : list.get(low - 1).timestamp;
             for (int i = low; i <= high; i++) {
+                long wanted = low == 0 && i == low ? reordered[0] : running + reordered[i - low];
+                running = wanted;
                 MessageEntry occupant = list.get(i);
-                if (occupant.timestamp != schedule[i - low]) {
-                    rewriteTimestamp(occupant, schedule[i - low]);
+                if (occupant.timestamp != wanted) {
+                    rewriteTimestamp(occupant, wanted);
                 }
             }
+            history.record(new EditHistory.Step("move " + entry.typeName, low,
+                    before, capture(low, high + 1)));
             publishChanged(entry, "moved");
             return at;
         } finally {
             lock.unlock();
         }
+    }
+
+    /**
+     * The position a message with this timestamp belongs at, so the list stays
+     * in ascending time. Ties go after the equal ones, which keeps a burst that
+     * shares a millisecond in the order it was built.
+     */
+    private int sortedIndexFor(long timestamp, long excludeId) {
+        List<MessageEntry> list = messages.entries();
+        int at = 0;
+        for (MessageEntry candidate : list) {
+            if (candidate.id == excludeId) {
+                continue;
+            }
+            if (candidate.timestamp > timestamp) {
+                break;
+            }
+            at++;
+        }
+        return at;
+    }
+
+    // ---- undo / redo -----------------------------------------------------
+
+    /** The messages occupying [from, to) right now, bytes and all. */
+    private List<EditHistory.Entry> capture(int from, int to) {
+        List<MessageEntry> list = messages.entries();
+        int lo = Math.min(Math.max(from, 0), list.size());
+        int hi = Math.min(Math.max(to, lo), list.size());
+        List<EditHistory.Entry> captured = new ArrayList<>(hi - lo);
+        for (int i = lo; i < hi; i++) {
+            MessageEntry entry = list.get(i);
+            captured.add(new EditHistory.Entry(entry.id, messages.bytesOf(entry)));
+        }
+        return captured;
+    }
+
+    public boolean canUndo() {
+        return history.canUndo();
+    }
+
+    public boolean canRedo() {
+        return history.canRedo();
+    }
+
+    public String undoLabel() {
+        return history.undoLabel();
+    }
+
+    public String redoLabel() {
+        return history.redoLabel();
+    }
+
+    /** Puts one step back. Returns what it was, or null if there was nothing. */
+    public String undo() {
+        lock.lock();
+        try {
+            EditHistory.Step step = history.popUndo();
+            if (step == null) {
+                return null;
+            }
+            apply(step.at(), step.after().size(), step.before());
+            publishReloaded();
+            events.info("session", "undid: " + step.label(),
+                    "log.session.undone", Map.of("what", step.label()));
+            return step.label();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public String redo() {
+        lock.lock();
+        try {
+            EditHistory.Step step = history.popRedo();
+            if (step == null) {
+                return null;
+            }
+            apply(step.at(), step.before().size(), step.after());
+            publishReloaded();
+            events.info("session", "redid: " + step.label(),
+                    "log.session.redone", Map.of("what", step.label()));
+            return step.label();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void apply(int at, int removeCount, List<EditHistory.Entry> entries) {
+        long[] ids = new long[entries.size()];
+        List<byte[]> bodies = new ArrayList<>(entries.size());
+        for (int i = 0; i < entries.size(); i++) {
+            ids[i] = entries.get(i).id();
+            bodies.add(entries.get(i).bytes());
+        }
+        messages.splice(at, removeCount, ids, bodies, Origin.NEW);
     }
 
     /** Writes a new timestamp into a message's header, leaving every other byte alone. */
@@ -372,7 +526,19 @@ public class SessionService {
             if (entry.sent) {
                 throw new IllegalStateException("message " + id + " has already been sent");
             }
-            rewriteTimestamp(entry, timestamp);
+            long wanted = Math.max(0, timestamp);
+            int was = messages.indexOf(id);
+            int goes = sortedIndexFor(wanted, entry.id);
+            int low = Math.min(was, goes);
+            int high = Math.max(was, goes);
+            List<EditHistory.Entry> before = capture(low, high + 1);
+            rewriteTimestamp(entry, wanted);
+            // A message's place in the list is its place in time. Re-timing it
+            // without moving it would leave a list that no longer reads in the
+            // order it will be sent, which is the one thing the list is for.
+            messages.move(entry.id, goes);
+            history.record(new EditHistory.Step("retime " + entry.typeName, low,
+                    before, capture(low, high + 1)));
             publishChanged(entry, "retimed");
             return entry;
         } finally {

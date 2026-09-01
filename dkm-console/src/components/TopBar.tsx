@@ -6,7 +6,8 @@ import { LANGUAGES } from '../i18n'
 import { useT } from '../i18n/useT'
 import { useStore, type ThemeChoice } from '../store/useStore'
 import { AlertDialog } from './AlertDialog'
-import { bytes, count, duration, rate } from './format'
+import { Icon, type IconName } from './Icon'
+import { bytes, count, duration, number, rate } from './format'
 import type { Selection } from './MessagePanel'
 import { LoadingSpinner } from './LoadingSpinner'
 
@@ -20,6 +21,8 @@ const LINK_STYLES: Record<LinkState, string> = {
 
 const SPEEDS = [0.25, 0.5, 1, 2, 5, 10, 25, 100]
 const THEME_ORDER: ThemeChoice[] = ['system', 'light', 'dark']
+
+const THEME_ICON: Record<string, IconName> = { dark: 'moon', light: 'sun', system: 'monitor' }
 
 export function TopBar({ selection }: { selection: Selection | null }) {
     const t = useT()
@@ -36,6 +39,7 @@ export function TopBar({ selection }: { selection: Selection | null }) {
     const touchSession = useStore((s) => s.touchSession)
     const pending = useStore((s) => s.pending)
     const setVizFrozen = useStore((s) => s.setVizFrozen)
+    const setStepping = useStore((s) => s.setStepping)
 
     const [busy, setBusy] = useState(false)
     const [problemCount, setProblemCount] = useState(0)
@@ -46,6 +50,8 @@ export function TopBar({ selection }: { selection: Selection | null }) {
 
     const running = playback.state === 'RUNNING'
     const paused = playback.state === 'PAUSED'
+    /** A run already under way: stepping continues it rather than repositioning. */
+    const stepped = playback.sent > 0 && paused
 
     const act = async (action: () => Promise<unknown>, describe: string) => {
         setBusy(true)
@@ -60,6 +66,10 @@ export function TopBar({ selection }: { selection: Selection | null }) {
      */
     const stop = () => act(async () => {
         const snapshot = await api.stop(true)
+        // An explicit freeze supersedes the stepping hold: the run is over, so
+        // there is nothing left to step, and the picture stops taking samples
+        // rather than merely stopping its clock.
+        setStepping(false)
         setVizFrozen(true)
         return snapshot
     }, t('transport.stop'))
@@ -81,6 +91,7 @@ export function TopBar({ selection }: { selection: Selection | null }) {
 
     const begin = async () => {
         setVizFrozen(false)
+        setStepping(false)
         await act(() => (paused ? api.resume() : api.start(startFrom?.id ?? 0)),
             paused ? t('transport.resume') : t('transport.start'))
     }
@@ -148,14 +159,29 @@ export function TopBar({ selection }: { selection: Selection | null }) {
     const onUpload = async (file: File | undefined) => {
         if (!file) return
         setBusy(true)
+        const started = performance.now()
         const result = await run(() => uploadInput(file), t('file.load'))
+        const elapsed = performance.now() - started
         setBusy(false)
         if (result) {
             touchSession()
             const problems = result.problems.length
-            notify(problems ? 'WARN' : 'INFO', problems
-                ? t('file.loadedWithProblems', { count: count(result.messages), name: file.name, problems })
-                : t('file.loaded', { count: count(result.messages), name: file.name }))
+            // How long it took and how fast it went, because "13,648 messages"
+            // alone says nothing about whether this tool can carry the file the
+            // operator is about to hand it.
+            const rateText = elapsed > 0
+                ? t('file.rate', {
+                    rate: bytes((result.bytes / elapsed) * 1000),
+                    ms: number(elapsed, elapsed < 100 ? 1 : 0),
+                })
+                : undefined
+            notify(problems ? 'warning' : 'success',
+                problems
+                    ? t('file.loadedWithProblems', {
+                        count: count(result.messages), name: file.name, problems,
+                    })
+                    : t('file.loaded', { count: count(result.messages), name: file.name }),
+                rateText)
         }
     }
 
@@ -220,6 +246,7 @@ export function TopBar({ selection }: { selection: Selection | null }) {
                         onClick={onStart}
                         title={paused ? t('transport.resumeTitle') : t('transport.startTitle')}
                     >
+                        <Icon name="play" size={13} />
                         {paused ? t('transport.resume') : t('transport.start')}
                     </button>
                     <button
@@ -228,7 +255,33 @@ export function TopBar({ selection }: { selection: Selection | null }) {
                         onClick={() => act(() => api.pause(), t('transport.pause'))}
                         title={t('transport.pauseTitle')}
                     >
+                        <Icon name="pause" size={13} />
                         {t('transport.pause')}
+                    </button>
+                    {/* Mentor's case: a message that is small on the wire but costs
+                        the DKM minutes of work. A paced run cannot wait for it --
+                        the clock moves on -- so stepping sends exactly one and
+                        leaves the operator to decide when the next goes. */}
+                    <button
+                        className="btn"
+                        disabled={busy || running}
+                        onClick={() => act(async () => {
+                            setVizFrozen(false)
+                            // The stepped message must reach the display, but
+                            // nothing already on it may fade while the operator
+                            // waits for the DKM to finish with it.
+                            setStepping(true)
+                            // Only on the first step: after that the run has a
+                            // position of its own and the selection is just
+                            // whatever the operator happens to be reading.
+                            return api.step(1, stepped ? 0 : startFrom?.id ?? 0)
+                        }, t('transport.step'))}
+                        title={startFrom && !stepped
+                            ? t('transport.stepFromTitle', { index: count((startFrom.index ?? 0) + 1) })
+                            : t('transport.stepTitle')}
+                    >
+                        <Icon name="step" size={13} />
+                        {t('transport.step')}
                     </button>
                     <button
                         className="btn btn-danger"
@@ -236,6 +289,7 @@ export function TopBar({ selection }: { selection: Selection | null }) {
                         onClick={onStop}
                         title={t('transport.stopTitle')}
                     >
+                        <Icon name="stop" size={13} />
                         {t('transport.stop')}
                     </button>
                 </div>
@@ -258,7 +312,16 @@ export function TopBar({ selection }: { selection: Selection | null }) {
                         className={`btn text-mini ${playback.mode === 'MAX_RATE' ? 'btn-primary' : ''}`}
                         disabled={busy}
                         onClick={() => act(
-                            () => api.setMode(playback.mode === 'MAX_RATE' ? 'TIMESTAMP' : 'MAX_RATE'),
+                            async () => {
+                                const next = playback.mode === 'MAX_RATE' ? 'TIMESTAMP' : 'MAX_RATE'
+                                const snapshot = await api.setMode(next)
+                                // Full rate is a measurement tool, not a way to
+                                // run faster: it throws the recording's timing
+                                // away, and the cross-link ordering the DKM
+                                // depends on survives only by luck at speed.
+                                if (next === 'MAX_RATE') notify('warning', t('transport.maxRateWarning'))
+                                return snapshot
+                            },
                             t('transport.timed'))}
                         title={t('transport.modeTitle')}
                     >
@@ -295,7 +358,7 @@ export function TopBar({ selection }: { selection: Selection | null }) {
 
                 <div className="flex items-center gap-1.5" data-tour="files">
                     <label className="btn cursor-pointer" title={t('file.loadTitle')}>
-                        {t('file.load')}
+                        <Icon name="open" size={13} />{t('file.load')}
                         <input
                             type="file"
                             className="hidden"
@@ -309,7 +372,7 @@ export function TopBar({ selection }: { selection: Selection | null }) {
                         onClick={() => downloadBinary('/api/session/export', 'input.bin')}
                         title={t('file.saveInputTitle')}
                     >
-                        {t('file.saveInput')}
+                        <Icon name="saveIn" size={13} />{t('file.saveInput')}
                     </button>
                     <button
                         className="btn"
@@ -317,7 +380,7 @@ export function TopBar({ selection }: { selection: Selection | null }) {
                         onClick={() => downloadBinary('/api/capture/export', 'output.bin')}
                         title={t('file.saveOutputTitle')}
                     >
-                        {t('file.saveOutput')}
+                        <Icon name="saveOut" size={13} />{t('file.saveOutput')}
                     </button>
                 </div>
 
@@ -390,12 +453,15 @@ function Settings() {
 
     return (
         <div className="flex items-center gap-1.5 pl-3 ml-1 border-l border-ink-700">
+            {/* The icon names the mode the button is in, not the one it goes to:
+                it is a state readout that also happens to advance. */}
             <button
-                className="btn text-mini py-0.5 w-16"
+                className="btn text-mini py-0.5 w-20"
                 onClick={() => setTheme(nextTheme)}
                 title={`${t('settings.theme')}: ${t(`settings.theme.${theme}` as never)}`}
                 aria-label={t('settings.theme')}
             >
+                <Icon name={THEME_ICON[theme]} size={12} />
                 {t(`settings.theme.${theme}` as never)}
             </button>
 
@@ -425,7 +491,7 @@ function Settings() {
                 title={t('settings.help')}
                 aria-label={t('settings.help')}
             >
-                ?
+                <Icon name="help" size={13} />
             </button>
         </div>
     )

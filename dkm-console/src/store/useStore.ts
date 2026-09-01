@@ -66,9 +66,14 @@ const IDLE_PLAYBACK: PlaybackSnapshot = {
     virtualMillis: 0, tracks: [],
 }
 
-export interface Notice {
-    level: 'INFO' | 'WARN' | 'ERROR'
+export type ToastLevel = 'success' | 'info' | 'warning' | 'error'
+
+export interface Toast {
+    id: number
+    level: ToastLevel
     message: string
+    /** A figure worth setting apart -- a count, a duration, a rate. */
+    detail?: string
     at: number
 }
 
@@ -100,7 +105,7 @@ interface State {
     captureTotal: number
     captureOverflowed: number
 
-    notice: Notice | null
+    toasts: Toast[]
 
     /**
      * How many gateway actions are in flight. A count rather than a flag: two
@@ -126,22 +131,48 @@ interface State {
 
     bootstrap: () => Promise<void>
     setVizConnected: (connected: boolean) => void
-    notify: (level: Notice['level'], message: string) => void
-    dismissNotice: () => void
+    notify: (level: ToastLevel | 'INFO' | 'WARN' | 'ERROR', message: string, detail?: string) => void
+    dismissToast: (id: number) => void
     refreshPlayback: () => Promise<void>
     refreshLinks: () => Promise<void>
     touchSession: () => void
     setVizFrozen: (frozen: boolean) => void
+    /**
+     * Stepping through the set by hand, so the picture must stop ageing.
+     *
+     * <p>Separate from vizFrozen because the two want different things: a freeze
+     * drops incoming frames, while stepping has to keep taking them -- the
+     * stepped message is the entire point -- and only stop the clock they age
+     * by. Two steps can be minutes apart, and marks that fade after eight
+     * seconds leave the operator looking at an empty display.
+     */
+    stepping: boolean
+    setStepping: (stepping: boolean) => void
     run: <T>(action: () => Promise<T>, describe?: string) => Promise<T | undefined>
 }
 
 const MAX_LOG = 800
+
+let toastId = 0
 
 const storedLang = readStored(STORAGE.lang)
 const storedTheme = readStored(STORAGE.theme)
 
 const initialLang: Lang = storedLang === 'tr' || storedLang === 'en' ? storedLang : detectLanguage()
 setNumberLocale(initialLang)
+applyLang(initialLang)
+
+/**
+ * Puts the language on the document element.
+ *
+ * <p>Not decoration: `text-transform: uppercase` is language-sensitive, and
+ * without this every uppercased Turkish label loses its dotted capital -- the
+ * interface says BEKLIYOR where it means BEKLİYOR. One attribute fixes it
+ * everywhere, which is why the strings themselves stay in normal case.
+ */
+function applyLang(lang: Lang) {
+    document.documentElement.lang = lang
+}
 
 export const useStore = create<State>((set, get) => ({
     lang: initialLang,
@@ -170,14 +201,16 @@ export const useStore = create<State>((set, get) => ({
     captureTotal: 0,
     captureOverflowed: 0,
 
-    notice: null,
+    toasts: [],
     pending: 0,
     vizFrozen: false,
+    stepping: false,
 
     setLang(lang) {
         writeStored(STORAGE.lang, lang)
         // Number separators follow the interface language, not the browser's.
         setNumberLocale(lang)
+        applyLang(lang)
         set({ lang })
     },
 
@@ -240,14 +273,6 @@ export const useStore = create<State>((set, get) => ({
         set({ vizConnected: connected })
     },
 
-    notify(level, message) {
-        set({ notice: { level, message, at: Date.now() } })
-    },
-
-    dismissNotice() {
-        set({ notice: null })
-    },
-
     async refreshPlayback() {
         set({ playback: await api.playback() })
     },
@@ -258,6 +283,26 @@ export const useStore = create<State>((set, get) => ({
 
     touchSession() {
         set((state) => ({ sessionVersion: state.sessionVersion + 1 }))
+    },
+
+    notify(level, message, detail) {
+        // The old three levels still arrive from the event stream, so they are
+        // mapped rather than forbidden: one vocabulary at the surface, both
+        // accepted underneath.
+        const mapped: ToastLevel = level === 'INFO' ? 'info'
+            : level === 'WARN' ? 'warning'
+                : level === 'ERROR' ? 'error'
+                    : level
+        set((state) => ({
+            toasts: [
+                ...state.toasts.slice(-3),
+                { id: ++toastId, level: mapped, message, detail, at: Date.now() },
+            ],
+        }))
+    },
+
+    dismissToast(id) {
+        set((state) => ({ toasts: state.toasts.filter((toast) => toast.id !== id) }))
     },
 
     async run(action, describe) {
@@ -275,6 +320,10 @@ export const useStore = create<State>((set, get) => ({
 
     setVizFrozen(frozen) {
         set({ vizFrozen: frozen })
+    },
+
+    setStepping(stepping) {
+        set({ stepping })
     },
 }))
 
@@ -338,12 +387,17 @@ function applyEvent(event: GatewayEvent, set: Setter, get: () => State) {
                 if (newest && line.seq <= newest.seq && line.seq > newest.seq - MAX_LOG) return state
                 const log = state.log.length >= MAX_LOG ? state.log.slice(-MAX_LOG + 1) : state.log.slice()
                 log.push(line)
-                return {
-                    log,
-                    notice: line.level === 'ERROR'
-                        ? { level: 'ERROR', message: `${line.source}: ${line.message}`, at: line.t }
-                        : state.notice,
-                }
+                // An error the gateway reported is the operator's problem too,
+                // so it is raised as well as filed.
+                const toasts = line.level === 'ERROR'
+                    ? [...state.toasts.slice(-3), {
+                        id: ++toastId,
+                        level: 'error' as ToastLevel,
+                        message: `${line.source}: ${line.message}`,
+                        at: line.t,
+                    }]
+                    : state.toasts
+                return { log, toasts }
             })
             break
         }

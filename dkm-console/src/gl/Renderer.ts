@@ -428,6 +428,7 @@ export class Renderer {
 
     private buildRects(scene: Scene, now: number) {
         for (const area of scene.rects.values()) {
+            if (scene.isHidden(area.link, area.msgId)) continue
             const x0 = Math.min(area.a, area.b)
             const x1 = Math.max(area.a, area.b)
             const y0 = Math.min(area.c, area.d)
@@ -450,6 +451,7 @@ export class Renderer {
      */
     private buildSectors(scene: Scene, now: number) {
         for (const area of scene.sectors.values()) {
+            if (scene.isHidden(area.link, area.msgId)) continue
             const r0 = Math.min(area.a, area.b)
             const r1 = Math.max(area.a, area.b)
             const h0 = Math.min(area.c, area.d)
@@ -485,6 +487,7 @@ export class Renderer {
     private buildTracks(scene: Scene) {
         for (const track of scene.tracks.values()) {
             if (track.count < 2) continue
+            if (scene.isHidden(track.link, track.msgId)) continue
             const capacity = track.xs.length
             const oldest = (track.head - track.count + capacity) % capacity
             let previousX = track.xs[oldest]
@@ -511,6 +514,7 @@ export class Renderer {
     private buildSegments(scene: Scene, now: number) {
         for (const list of [scene.rays, scene.lines]) {
             for (const segment of list) {
+                if (scene.isHidden(segment.link, segment.msgId)) continue
                 const age = (now - segment.birth) / segment.lifetime
                 if (age >= 1) continue
                 const alpha = (1 - age) * 0.8

@@ -92,6 +92,10 @@ public class SessionResource {
             // and stay quiet about one that is exactly what was loaded.
             node.put("dirty", set.isDirty());
             node.put("revertable", session.canRevert());
+            node.put("canUndo", session.canUndo());
+            node.put("canRedo", session.canRedo());
+            node.put("undoLabel", session.undoLabel());
+            node.put("redoLabel", session.redoLabel());
             node.put("sort", order.name().toLowerCase(java.util.Locale.ROOT));
             node.put("dir", descending ? "desc" : "asc");
             node.put("total", set.size());
@@ -167,6 +171,29 @@ public class SessionResource {
         requireNotRunning();
         MessageEntry entry = session.retime(id, body.path("timestamp").asLong());
         return session.read(() -> views.detail(session.messages(), entry));
+    }
+
+    /** FR-8/FR-9: step back and forward through what the operator changed. */
+    @POST
+    @Path("/undo")
+    public ObjectNode undo() {
+        requireNotRunning();
+        String label = session.undo();
+        ObjectNode node = NODES.objectNode();
+        node.put("applied", label != null);
+        node.put("label", label);
+        return node;
+    }
+
+    @POST
+    @Path("/redo")
+    public ObjectNode redo() {
+        requireNotRunning();
+        String label = session.redo();
+        ObjectNode node = NODES.objectNode();
+        node.put("applied", label != null);
+        node.put("label", label);
+        return node;
     }
 
     /** Puts the set back exactly as the file was loaded, dropping every edit since. */
@@ -251,7 +278,15 @@ public class SessionResource {
 
     // ---- files -----------------------------------------------------------
 
-    /** FR-6: load an input binary through the browser. */
+    /**
+     * FR-6: load an input binary through the browser.
+     *
+     * <p>Ends whatever run was paused over the previous set. A run's position,
+     * its counters and its progress denominator all describe the set it was
+     * reading; carried onto a different one they describe nothing, and a step
+     * taken afterwards would be working from a plan built over bytes that are
+     * no longer there.
+     */
     @POST
     @Path("/load")
     @Consumes(MediaType.MULTIPART_FORM_DATA)
@@ -259,6 +294,7 @@ public class SessionResource {
         requireNotRunning();
         try (InputStream in = Files.newInputStream(file.uploadedFile())) {
             MessageSet.ParseResult result = session.load(in, file.fileName(), file.size());
+            playback.stop(true);
             return describe(result);
         }
     }
@@ -273,7 +309,9 @@ public class SessionResource {
         if (!Files.isReadable(path)) {
             throw new IllegalArgumentException("cannot read " + path.toAbsolutePath());
         }
-        return describe(session.loadFile(path));
+        MessageSet.ParseResult result = session.loadFile(path);
+        playback.stop(true);
+        return describe(result);
     }
 
     private ObjectNode describe(MessageSet.ParseResult result) {
@@ -304,6 +342,7 @@ public class SessionResource {
     public ObjectNode clear() {
         requireNotRunning();
         session.clear();
+        playback.stop(true);
         ObjectNode node = NODES.objectNode();
         node.put("total", 0);
         return node;

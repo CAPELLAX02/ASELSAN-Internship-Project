@@ -116,6 +116,20 @@ public class StatusResource {
             node.put("level", entry.level());
             node.put("source", entry.source());
             node.put("message", entry.message());
+            // The backlog carries the same translation key the live stream does,
+            // so a page that loads mid-session reads in the operator's language
+            // rather than only the lines that arrived after it opened.
+            if (entry.key() != null) {
+                node.put("key", entry.key());
+                ObjectNode bag = node.putObject("params");
+                entry.params().forEach((name, value) -> {
+                    if (value instanceof Number number) {
+                        bag.put(name, number.doubleValue());
+                    } else {
+                        bag.put(name, String.valueOf(value));
+                    }
+                });
+            }
         }
         return array;
     }

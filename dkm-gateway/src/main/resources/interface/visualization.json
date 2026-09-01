@@ -26,24 +26,49 @@
       "type": "RSP/DetectionReport",
       "kind": "POINT",
       "coordinates": "POLAR",
-      "repeat": { "array": "detections", "countField": "detection_count" },
-      "bindings": { "distance": "detections[].distance", "heading": "detections[].heading" },
-      "style": { "color": "#f59e0b", "label": "Detection" }
+      "repeat": {
+        "array": "detections",
+        "countField": "detection_count"
+      },
+      "bindings": {
+        "distance": "detections[].distance",
+        "heading": "detections[].heading"
+      },
+      "style": {
+        "color": "#f59e0b",
+        "label": "Detection"
+      }
     },
     {
       "type": "RSP/JammerReport",
       "kind": "RAY",
       "coordinates": "POLAR",
-      "bindings": { "heading": { "lookup": "BEAM_HEADING", "keyField": "beam_id" } },
-      "style": { "color": "#ef4444", "label": "Jammer strobe", "dashed": true, "persistenceMs": 6000 },
+      "bindings": {
+        "heading": {
+          "lookup": "BEAM_HEADING",
+          "keyField": "beam_id"
+        }
+      },
+      "style": {
+        "color": "#ef4444",
+        "label": "Jammer strobe",
+        "dashed": true,
+        "persistenceMs": 6000
+      },
       "note": "A JammerReport carries no bearing of its own -- it names a beam. The bearing is resolved from the most recent BeamReport with that beam_id, mirroring mock_r's BeamReportBuffer lookup. Unknown beam_id renders nothing, exactly as mock_r drops it."
     },
     {
       "type": "RSM/BeamReport",
       "kind": "RAY",
       "coordinates": "POLAR",
-      "bindings": { "heading": "beam_heading" },
-      "style": { "color": "#64748b", "label": "Beam", "persistenceMs": 350 },
+      "bindings": {
+        "heading": "beam_heading"
+      },
+      "style": {
+        "color": "#64748b",
+        "label": "Beam",
+        "persistenceMs": 350
+      },
       "note": "A rotating antenna announces tens of beams a second, so a long persistence turns the display into a starburst that buries everything under it. A short one leaves a bright sweep with a fading tail behind it -- readable, and what a plan display actually looks like."
     },
     {
@@ -56,14 +81,27 @@
         "startHeading": "start_heading",
         "endHeading": "end_heading"
       },
-      "style": { "color": "#dc2626", "fillOpacity": 0.14, "label": "Gate (exclusion)" }
+      "style": {
+        "color": "#dc2626",
+        "fillOpacity": 0.14,
+        "label": "Gate (exclusion)"
+      }
     },
     {
       "type": "RSM/ReportingAreaMsg",
       "kind": "RECT_AREA",
       "coordinates": "CARTESIAN",
-      "bindings": { "startX": "start_x", "endX": "end_x", "startY": "start_y", "endY": "end_y" },
-      "style": { "color": "#22c55e", "fillOpacity": 0.08, "label": "Reporting (inclusion)" }
+      "bindings": {
+        "startX": "start_x",
+        "endX": "end_x",
+        "startY": "start_y",
+        "endY": "end_y"
+      },
+      "style": {
+        "color": "#22c55e",
+        "fillOpacity": 0.08,
+        "label": "Reporting (inclusion)"
+      }
     },
     {
       "type": "RSM/ReadCommand",
@@ -73,16 +111,31 @@
       "type": "RSM/MeasurementReport",
       "kind": "POINT",
       "coordinates": "POLAR",
-      "bindings": { "distance": "distance", "heading": "heading" },
-      "style": { "color": "#22d3ee", "label": "Measurement", "emphasis": true }
+      "bindings": {
+        "distance": "distance",
+        "heading": "heading"
+      },
+      "style": {
+        "color": "#22d3ee",
+        "label": "Measurement",
+        "emphasis": true
+      }
     },
     {
       "type": "CRM/Prediction",
       "kind": "TRACK",
       "coordinates": "CARTESIAN",
       "correlation": "track_id",
-      "bindings": { "x": "pos_x", "y": "pos_y", "vx": "vel_x", "vy": "vel_y" },
-      "style": { "color": "#a78bfa", "label": "Track" }
+      "bindings": {
+        "x": "pos_x",
+        "y": "pos_y",
+        "vx": "vel_x",
+        "vy": "vel_y"
+      },
+      "style": {
+        "color": "#a78bfa",
+        "label": "Track"
+      }
     }
   ]
 }

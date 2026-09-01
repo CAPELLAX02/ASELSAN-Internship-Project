@@ -20,6 +20,7 @@ import org.jboss.logging.Logger;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
 
@@ -119,6 +120,10 @@ public class PlaybackEngine {
      * throughput -- on a multi-million-message set it is the difference between
      * a defensible number and a flattering one.
      */
+    /** How big this run was when it began, so progress keeps one denominator. */
+    private volatile int runPlannedMessages;
+    private volatile long runPlannedBytes;
+
     private volatile long planBuildMillis;
 
     void onStop(@Observes ShutdownEvent event) {
@@ -152,14 +157,14 @@ public class PlaybackEngine {
         lastError = null;
         runStartedWallClock = System.currentTimeMillis();
         runFinishedWallClock = 0;
-        launch("started");
+        launch("started", true);
     }
 
     public synchronized void resume() {
         if (state != PlaybackState.PAUSED) {
             return;
         }
-        launch("resumed");
+        launch("resumed", false);
     }
 
     /**
@@ -168,7 +173,7 @@ public class PlaybackEngine {
      * sent markers, so an edit made while paused is picked up here with no
      * special case.
      */
-    private void launch(String verb) {
+    private void launch(String verb, boolean fresh) {
         long planStarted = System.currentTimeMillis();
         ReplayPlan built = buildPlan();
         planBuildMillis = System.currentTimeMillis() - planStarted;
@@ -187,6 +192,12 @@ public class PlaybackEngine {
             throw new IllegalStateException(lastError);
         }
 
+        if (fresh) {
+            // See prepareForStepping: the denominator belongs to the run, not to
+            // the plan, which is rebuilt over the remainder on every resume.
+            runPlannedMessages = built.totalMessages;
+            runPlannedBytes = built.totalBytes;
+        }
         plan = built;
         long anchor = Long.MAX_VALUE;
         for (ReplayPlan.Track t : built.tracks) {
@@ -211,6 +222,157 @@ public class PlaybackEngine {
         pacer = thread;
         thread.start();
         publishState();
+    }
+
+    /**
+     * Sends the next {@code count} messages and stops there (FR-11).
+     *
+     * <p>Some messages are small and cost the DKM minutes of work. Watching what
+     * one of them does means sending exactly that one and then waiting as long
+     * as it takes -- which a paced run cannot do, because the clock keeps moving
+     * and the next message comes due whether the module is ready or not.
+     *
+     * <p>Stepping deliberately ignores the recorded timing: it sends the next
+     * message due on whichever link is earliest, so cross-link order is still
+     * the recording's order, but the gaps between them are the operator's to
+     * decide. The run stays paused throughout, so everything still unsent stays
+     * editable between steps.
+     *
+     * @return how many actually went out, which is fewer than asked when the
+     *         set runs out or a link is down
+     */
+    public synchronized int step(int count, long fromMessageId) {
+        if (state == PlaybackState.RUNNING) {
+            throw new IllegalStateException("pause the run before stepping through it");
+        }
+        // A run that has not begun, or one being repositioned, starts over; one
+        // already paused keeps its counters so the progress readout stays
+        // cumulative across steps.
+        boolean fresh = state == PlaybackState.IDLE || state == PlaybackState.FINISHED
+                || fromMessageId > 0;
+        if (!prepareForStepping(fromMessageId, fresh)) {
+            return 0;
+        }
+        ReplayPlan p = plan;
+        if (p == null) {
+            return 0;
+        }
+        int sent = 0;
+        for (int i = 0; i < Math.max(1, count); i++) {
+            if (!stepOnce(p)) {
+                break;
+            }
+            sent++;
+        }
+        if (sent > 0) {
+            publishProgress(p);
+            events.info("playback", "stepped " + sent + " message(s); " + sentCounter.get()
+                    + " sent so far", "log.playback.stepped",
+                    java.util.Map.of("count", sent, "total", sentCounter.get()));
+        }
+        if (p.complete()) {
+            finish(p);
+        } else {
+            publishState();
+        }
+        return sent;
+    }
+
+    /**
+     * Builds a plan over whatever is still unsent and parks the run at its
+     * start, without a pacer thread.
+     *
+     * <p>Rebuilt on every step, exactly as {@link #resume()} rebuilds on every
+     * resume. The plan is not state -- it is derived from the sent markers, and
+     * holding one across a step meant an edit made between two steps, or a
+     * different file loaded entirely, left it pointing at an arena that no
+     * longer existed.
+     *
+     * @param fromMessageId step from this message on, or 0 to continue
+     * @param fresh         reset the run's counters, because this is its start
+     * @return whether there is anything to step onto
+     */
+    private boolean prepareForStepping(long fromMessageId, boolean fresh) {
+        if (fresh) {
+            session.resetSentMarkers(fromMessageId);
+            sentCounter.set(0);
+            sentBytes.set(0);
+            lastVirtualMillis = 0;
+            lastError = null;
+            runStartedWallClock = System.currentTimeMillis();
+            runFinishedWallClock = 0;
+        }
+        ReplayPlan built = buildPlan();
+        if (built.totalMessages == 0) {
+            plan = null;
+            state = PlaybackState.FINISHED;
+            runFinishedWallClock = System.currentTimeMillis();
+            events.warn("playback", "nothing left to send");
+            publishState();
+            return false;
+        }
+        if (linkRegistry.links().stream().noneMatch(Link::isConnected)) {
+            lastError = "no link is connected -- the DKM connects out once at its own startup and never retries";
+            events.error("playback", lastError);
+            publishState();
+            throw new IllegalStateException(lastError);
+        }
+        if (fresh) {
+            // The size of the whole run, fixed here so the progress readout keeps
+            // one denominator: every re-plan sees only what is left, and reporting
+            // that would make the total shrink as the operator advances.
+            runPlannedMessages = built.totalMessages;
+            runPlannedBytes = built.totalBytes;
+        }
+        plan = built;
+        clock = ReplayClock.startingAt(System.nanoTime(), 0, speed);
+        state = PlaybackState.PAUSED;
+        lagMillis = 0;
+        return true;
+    }
+
+    /**
+     * Sends exactly one message: the next one due on whichever link is earliest
+     * in the recording, so a step never reorders what a run would have sent.
+     */
+    private boolean stepOnce(ReplayPlan p) {
+        ReplayPlan.Track chosen = null;
+        for (ReplayPlan.Track track : p.tracks) {
+            if (track.done()) {
+                continue;
+            }
+            if (chosen == null || track.offsetMillis[track.cursor] < chosen.offsetMillis[chosen.cursor]) {
+                chosen = track;
+            }
+        }
+        if (chosen == null) {
+            return false;
+        }
+        Link link = chosen.link;
+        if (!link.isConnected()) {
+            events.error(link.name(), "link is not connected -- nothing to step onto");
+            return false;
+        }
+        if (link.writeQueueFull() && !link.awaitDrain(config.drainTimeoutMillis())) {
+            return false;
+        }
+
+        int at = chosen.cursor;
+        int length = chosen.lengths[at];
+        ByteBuf slice = p.arena.retainedSlice(chosen.offsets[at], length);
+        if (!link.write(slice, 1)) {
+            return false;
+        }
+
+        MessageEntry entry = chosen.entries[at];
+        entry.sent = true;
+        entry.wallClock = System.currentTimeMillis();
+        viz.onStimulus(link.index, link.moduleId(), entry.msgId,
+                p.arena, chosen.offsets[at], length);
+        chosen.cursor = at + 1;
+        sentBytes.addAndGet(length);
+        sentCounter.addAndGet(1);
+        return true;
     }
 
     public synchronized void pause() {
@@ -239,7 +401,8 @@ public class PlaybackEngine {
             sentBytes.set(0);
             lastVirtualMillis = 0;
             state = PlaybackState.IDLE;
-            events.info("playback", "stopped and rewound to the start -- the whole set is editable again");
+            events.info("playback", "stopped and rewound to the start -- the whole set is editable again",
+                    "log.playback.stoppedRewound", Map.of());
         } else {
             state = PlaybackState.FINISHED;
             runFinishedWallClock = System.currentTimeMillis();
@@ -259,7 +422,8 @@ public class PlaybackEngine {
             clock = clock.reanchor(System.nanoTime(), newSpeed);
             LockSupport.unpark(pacer);
         }
-        events.info("playback", "speed set to " + newSpeed + "x");
+        events.info("playback", "speed set to " + newSpeed + "x",
+                "log.playback.speed", Map.of("speed", newSpeed));
         publishState();
     }
 
@@ -269,7 +433,8 @@ public class PlaybackEngine {
             clock = clock.reanchor(System.nanoTime(), speed);
             LockSupport.unpark(pacer);
         }
-        events.info("playback", "pacing mode set to " + newMode);
+        events.info("playback", "pacing mode set to " + newMode,
+                "log.playback.mode", Map.of("mode", newMode.name()));
         publishState();
     }
 
@@ -600,8 +765,8 @@ public class PlaybackEngine {
         node.put("startedAt", runStartedWallClock);
         node.put("finishedAt", runFinishedWallClock);
         if (p != null) {
-            node.put("planned", p.totalMessages);
-            node.put("plannedBytes", p.totalBytes);
+            node.put("planned", runPlannedMessages);
+            node.put("plannedBytes", runPlannedBytes);
             node.put("spanMillis", p.spanMillis);
             node.put("epochMillis", p.epochMillis);
             node.put("virtualMillis", state == PlaybackState.RUNNING
@@ -635,7 +800,7 @@ public class PlaybackEngine {
         events.publish("playbackProgress", data -> {
             data.put("sent", sentCounter.get());
             data.put("sentBytes", sentBytes.get());
-            data.put("planned", p.totalMessages);
+            data.put("planned", runPlannedMessages);
             data.put("virtualMillis", clock.virtualMillisAt(System.nanoTime()));
             data.put("lagMillis", lagMillis());
             ArrayNode tracks = data.putArray("tracks");

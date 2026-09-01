@@ -124,20 +124,45 @@ public class EventHub {
     // ---- session log ----------------------------------------------------
 
     public void info(String source, String message) {
-        log("INFO", source, message);
+        log("INFO", source, message, null, Map.of());
     }
 
     public void warn(String source, String message) {
-        log("WARN", source, message);
+        log("WARN", source, message, null, Map.of());
     }
 
     public void error(String source, String message) {
-        log("ERROR", source, message);
+        log("ERROR", source, message, null, Map.of());
+    }
+
+    /** Same, with a translation key and its parameters for the console. */
+    public void info(String source, String message, String key, Map<String, Object> params) {
+        log("INFO", source, message, key, params);
+    }
+
+    public void warn(String source, String message, String key, Map<String, Object> params) {
+        log("WARN", source, message, key, params);
+    }
+
+    public void error(String source, String message, String key, Map<String, Object> params) {
+        log("ERROR", source, message, key, params);
     }
 
     public void log(String level, String source, String message) {
+        log(level, source, message, null, Map.of());
+    }
+
+    /**
+     * Logs a line that the console can render in its own language.
+     *
+     * <p>The English text is always sent: it is what goes to the server log and
+     * what a client with no translation for {@code key} falls back to, so a new
+     * message is never invisible just because nobody has translated it yet. The
+     * key and its parameters ride alongside for the clients that can do better.
+     */
+    public void log(String level, String source, String message, String key, Map<String, Object> params) {
         LogEntry entry = new LogEntry(sequence.incrementAndGet(), System.currentTimeMillis(),
-                level, source, message);
+                level, source, message, key, params == null ? Map.of() : params);
         synchronized (history) {
             if (history.size() == LOG_HISTORY) {
                 history.remove(0);
@@ -156,6 +181,17 @@ public class EventHub {
         data.put("level", entry.level());
         data.put("source", entry.source());
         data.put("message", entry.message());
+        if (entry.key() != null) {
+            data.put("key", entry.key());
+            ObjectNode bag = data.putObject("params");
+            entry.params().forEach((name, value) -> {
+                if (value instanceof Number number) {
+                    bag.put(name, number.doubleValue());
+                } else {
+                    bag.put(name, String.valueOf(value));
+                }
+            });
+        }
         publish(event);
     }
 
