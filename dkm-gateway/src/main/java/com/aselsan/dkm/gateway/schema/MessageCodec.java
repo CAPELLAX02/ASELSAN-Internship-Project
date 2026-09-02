@@ -379,32 +379,31 @@ public final class MessageCodec {
     // ---- header helpers -------------------------------------------------
 
     public long senderId(ByteBuf buf, int base) {
-        return wire.readUnsigned(buf, base + schema.senderIdOffset(), schema.sizeTBytes());
+        return wire.readUnsigned(buf, base + schema.senderIdOffset(), schema.senderIdWidth());
     }
 
     public long receiverId(ByteBuf buf, int base) {
-        return wire.readUnsigned(buf, base + schema.receiverIdOffset(), schema.sizeTBytes());
+        return wire.readUnsigned(buf, base + schema.receiverIdOffset(), schema.receiverIdWidth());
     }
 
     public long msgId(ByteBuf buf, int base) {
-        return wire.readUnsigned(buf, base + schema.msgIdOffset(), schema.sizeTBytes());
+        return wire.readUnsigned(buf, base + schema.msgIdOffset(), schema.msgIdWidth());
     }
 
     public long timestamp(ByteBuf buf, int base) {
-        return wire.readUnsigned(buf, base + schema.timestampOffset(), schema.sizeTBytes());
+        return wire.readUnsigned(buf, base + schema.timestampOffset(), schema.timestampWidth());
     }
 
     public long msgLength(ByteBuf buf, int base) {
-        return wire.readUnsigned(buf, base + schema.msgLengthOffset(), schema.sizeTBytes());
+        return wire.readUnsigned(buf, base + schema.msgLengthOffset(), schema.msgLengthWidth());
     }
 
     public void writeHeader(ByteBuf dst, int base, long senderId, long receiverId,
                             long msgId, long timestamp, long msgLength) {
-        int w = schema.sizeTBytes();
-        wire.writeInteger(dst, base + schema.senderIdOffset(), w, senderId);
-        wire.writeInteger(dst, base + schema.receiverIdOffset(), w, receiverId);
-        wire.writeInteger(dst, base + schema.msgIdOffset(), w, msgId);
-        wire.writeInteger(dst, base + schema.timestampOffset(), w, timestamp);
-        wire.writeInteger(dst, base + schema.msgLengthOffset(), w, msgLength);
+        wire.writeInteger(dst, base + schema.senderIdOffset(), schema.senderIdWidth(), senderId);
+        wire.writeInteger(dst, base + schema.receiverIdOffset(), schema.receiverIdWidth(), receiverId);
+        wire.writeInteger(dst, base + schema.msgIdOffset(), schema.msgIdWidth(), msgId);
+        wire.writeInteger(dst, base + schema.timestampOffset(), schema.timestampWidth(), timestamp);
+        wire.writeInteger(dst, base + schema.msgLengthOffset(), schema.msgLengthWidth(), msgLength);
     }
 }

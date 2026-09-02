@@ -6,6 +6,7 @@ import { Renderer, type Camera, type Palette } from '../gl/Renderer'
 import { Scene } from '../gl/Scene'
 import { hasTranslation } from '../i18n'
 import { Icon } from './Icon'
+import { VizLayersDialog } from './VizLayersDialog'
 import { useT } from '../i18n/useT'
 import { PlanTooltip, type TooltipTarget } from './PlanTooltip'
 import { useStore } from '../store/useStore'
@@ -55,6 +56,7 @@ export function RadarView() {
      * schema reload and means the same thing after the modules are renumbered.
      */
     const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(new Set())
+    const [layersOpen, setLayersOpen] = useState(false)
     // Camera lives in a ref: panning at 60 Hz must not re-render the tree.
     const cameraRef = useRef<Camera>({ centerX: 0, centerY: 0, metersPerPixel: 4 })
     const rendererRef = useRef<Renderer | null>(null)
@@ -153,6 +155,8 @@ export function RadarView() {
         let frame = 0
         let lastHud = 0
         let lastPick = 0
+        /** The canvas size the camera is currently scaled for. */
+        let lastShortSide = 0
         const scene = sceneRef.current
 
         const draw = () => {
@@ -161,6 +165,21 @@ export function RadarView() {
             // readouts and the tooltip keep working during a freeze.
             const now = performance.now()
             const sceneTime = sceneNow()
+
+            // A plan view is read by its range rings, so what survives a resize
+            // is the coverage, not the pixel scale: make the panel taller and
+            // the same picture gets bigger rather than revealing more empty
+            // ground around itself. Done here rather than in the resize
+            // observer because this loop already has the measurement and runs
+            // whatever order the refs settle in.
+            const shortSide = Math.min(canvas.clientWidth, canvas.clientHeight)
+            if (shortSide > 0) {
+                if (lastShortSide > 0 && shortSide !== lastShortSide) {
+                    cameraRef.current.metersPerPixel *= lastShortSide / shortSide
+                }
+                lastShortSide = shortSide
+            }
+
             scene.expire(sceneTime)
             renderer.render(scene, cameraRef.current, sceneTime)
             // Hit testing rides the frame loop rather than the pointer event: one
@@ -295,6 +314,14 @@ export function RadarView() {
         return entries
     }, [vizCatalog, t])
 
+    const toggleType = useCallback((type: string) => {
+        setHiddenTypes((current) => {
+            const next = new Set(current)
+            if (!next.delete(type)) next.add(type)
+            return next
+        })
+    }, [])
+
     const toWorld = (event: { clientX: number; clientY: number }) => {
         const canvas = canvasRef.current!
         const rect = canvas.getBoundingClientRect()
@@ -374,7 +401,7 @@ export function RadarView() {
     }
 
     return (
-        <div className="panel flex-1 relative min-h-0" data-tour="viz">
+        <div className="panel flex-1 relative min-h-[14rem]" data-tour="viz">
             <div className="panel-title">
                 <span>{t('viz.title')}</span>
                 <span className="flex items-center gap-2 normal-case tracking-normal">
@@ -486,7 +513,35 @@ export function RadarView() {
                 operator can read at once, and the thing they want to isolate is
                 always named right here -- so naming it and switching it off are
                 the same gesture, and no second panel has to exist. */}
-            <div className="absolute right-3 bottom-3 flex flex-col items-end gap-0.5 text-mini">
+            {/* Inside the display, at the corner the legend grows from: the
+                control that manages the legend belongs where the legend is. */}
+            <button
+                className="btn absolute right-3 bottom-3 text-mini py-1 z-10"
+                onClick={() => setLayersOpen(true)}
+                title={t('viz.layers.openTitle')}
+            >
+                <Icon name="layers" size={13} />
+                {t('viz.layers.open')}
+                {hiddenTypes.size > 0 && (
+                    <span className="badge badge-skipped ml-0.5">
+                        {t('viz.layers.count', {
+                            shown: legend.length - hiddenTypes.size, total: legend.length,
+                        })}
+                    </span>
+                )}
+            </button>
+
+            <VizLayersDialog
+                open={layersOpen}
+                entries={legend}
+                hidden={hiddenTypes}
+                onToggle={toggleType}
+                onAll={() => setHiddenTypes(new Set())}
+                onNone={() => setHiddenTypes(new Set(legend.map((e) => e.type)))}
+                onClose={() => setLayersOpen(false)}
+            />
+
+            <div className="absolute right-3 bottom-11 flex flex-col items-end gap-0.5 text-mini">
                 {legend.length > 1 && (
                     <div className="flex items-center gap-2 mb-0.5 text-ink-500">
                         <span>{t('viz.filter.title')}</span>
@@ -516,11 +571,7 @@ export function RadarView() {
                             className={`flex items-center gap-1.5 text-left ${off ? 'text-ink-600' : 'text-ink-300'}`}
                             title={t(off ? 'viz.filter.show' : 'viz.filter.hide', { type: entry.label })}
                             aria-pressed={!off}
-                            onClick={() => setHiddenTypes((current) => {
-                                const next = new Set(current)
-                                if (!next.delete(entry.type)) next.add(entry.type)
-                                return next
-                            })}
+                            onClick={() => toggleType(entry.type)}
                         >
                             <Icon name={off ? 'eyeOff' : 'eye'} size={11}
                                 className={off ? 'opacity-60' : 'opacity-0'} />

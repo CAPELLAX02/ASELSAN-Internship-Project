@@ -320,6 +320,11 @@ export class Renderer {
         this.lines.reset()
         this.triangles.reset()
 
+        // Far enough to leave the viewport from the centre at this zoom, with the
+        // pan offset allowed for, so an unbounded ray always runs off the edge.
+        scene.viewRadius = Math.hypot(width, height) * camera.metersPerPixel
+            + Math.hypot(camera.centerX, camera.centerY)
+
         const ringStep = this.buildGrid(camera, width, height)
         this.buildRects(scene, now)
         this.buildSectors(scene, now)
@@ -518,20 +523,24 @@ export class Renderer {
                 const age = (now - segment.birth) / segment.lifetime
                 if (age >= 1) continue
                 const alpha = (1 - age) * 0.8
+                const endX = segment.unbounded
+                    ? Math.cos(segment.heading) * scene.viewRadius : segment.x2
+                const endY = segment.unbounded
+                    ? Math.sin(segment.heading) * scene.viewRadius : segment.y2
                 if (segment.dashed) {
                     const dashes = 24
                     for (let i = 0; i < dashes; i += 2) {
                         const t0 = i / dashes
                         const t1 = (i + 1) / dashes
                         this.lines.line(
-                            segment.x1 + (segment.x2 - segment.x1) * t0,
-                            segment.y1 + (segment.y2 - segment.y1) * t0,
-                            segment.x1 + (segment.x2 - segment.x1) * t1,
-                            segment.y1 + (segment.y2 - segment.y1) * t1,
+                            segment.x1 + (endX - segment.x1) * t0,
+                            segment.y1 + (endY - segment.y1) * t0,
+                            segment.x1 + (endX - segment.x1) * t1,
+                            segment.y1 + (endY - segment.y1) * t1,
                             segment.color, alpha)
                     }
                 } else {
-                    this.lines.line(segment.x1, segment.y1, segment.x2, segment.y2, segment.color, alpha)
+                    this.lines.line(segment.x1, segment.y1, endX, endY, segment.color, alpha)
                 }
             }
         }

@@ -5,6 +5,7 @@ import type { MessageDetail } from '../api/types'
 import { useT, type Translate } from '../i18n/useT'
 import { useStore } from '../store/useStore'
 import { Icon } from './Icon'
+import { NumberField } from './NumberField'
 import { AlertDialog } from './AlertDialog'
 import { FieldEditor, type FieldPath } from './FieldEditor'
 import { LibraryPanel } from './LibraryPanel'
@@ -215,12 +216,17 @@ function MessageInspector({ selection, onSelect }: {
                 <div className="flex items-baseline gap-2 flex-wrap">
                     <span className="text-ink-100 text-body">{detail.type ?? `msg_id ${detail.msgId}`}</span>
                     <span className="text-ink-500">#{detail.id}</span>
-                    <span className={`badge ${detail.problem ? 'badge-blocked'
-                        : isCapture ? 'badge-capture'
-                            : detail.sent ? 'badge-sent' : 'badge-pending'}`}>
+                    <span
+                        className={`badge ${detail.problem ? 'badge-blocked'
+                            : isCapture ? 'badge-capture'
+                                : detail.sent ? 'badge-sent'
+                                    : detail.skipped ? 'badge-skipped' : 'badge-pending'}`}
+                        title={detail.skipped && !detail.sent ? t('row.skippedTitle') : undefined}
+                    >
                         {detail.problem ? t('row.blocked')
                             : isCapture ? t('inspector.fromDkm')
-                                : detail.sent ? t('row.sent') : t('row.pending')}
+                                : detail.sent ? t('row.sent')
+                                    : detail.skipped ? t('row.skipped') : t('row.pending')}
                     </span>
                     {detail.origin && detail.origin !== 'FILE' && (
                         <span className="text-ink-500 text-micro">{detail.origin.toLowerCase()}</span>
@@ -468,15 +474,15 @@ function NewMessageForm({ selection }: { selection: Selection | null }) {
 
             <label className="flex items-center gap-2">
                 <span className="w-44 shrink-0 text-ink-300">{t('new.index')}</span>
-                <input className="field" type="number" min={0} max={sessionCount} value={index}
-                    onChange={(e) => setChosenIndex(Number(e.target.value))} />
+                <NumberField className="field" integer min={0} max={sessionCount}
+                    value={index} onChange={setChosenIndex} />
             </label>
 
             <label className="flex items-start gap-2">
                 <span className="w-44 shrink-0 text-ink-300 pt-1">{t('new.offset')}</span>
                 <span className="flex-1">
-                    <input className="field" type="number" value={offsetMillis}
-                        onChange={(e) => setOffsetMillis(Number(e.target.value))} />
+                    <NumberField className="field" integer min={0}
+                        value={offsetMillis} onChange={setOffsetMillis} />
                     <span className="block text-ink-500 mt-1">{t('new.offsetHint')}</span>
                 </span>
             </label>

@@ -483,7 +483,7 @@ public class PlaybackEngine {
                     if (e.moduleId != link.moduleId()) {
                         continue;
                     }
-                    if (e.sent) {
+                    if (e.sent || e.skipped) {
                         continue;
                     }
                     if (e.problem != null) {

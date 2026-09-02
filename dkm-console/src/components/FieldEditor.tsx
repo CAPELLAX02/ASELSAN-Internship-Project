@@ -1,7 +1,9 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import type { FieldDef, MessageDef, Schema } from '../api/types'
 import { useT, type Translate } from '../i18n/useT'
+import { Icon } from './Icon'
+import { NumberField } from './NumberField'
 
 /**
  * Generates a field editor from the schema (FR-30, G2).
@@ -153,48 +155,152 @@ function ArrayField({ schema, field, path, value, siblings, readOnly, onChange, 
             <div className="flex flex-col gap-1.5">
                 {Array.from({ length: field.arrayLength }, (_, index) => {
                     const inactive = index >= live
+                    const struct = field.kind === 'STRUCT_ARRAY' ? field.struct : null
+                    const body = struct
+                        ? struct.fields.map((child) => (
+                            <FieldRow
+                                key={child.name}
+                                schema={schema}
+                                field={child}
+                                path={[...path, index, child.name]}
+                                value={(elements[index] as Record<string, unknown>)?.[child.name]}
+                                siblings={(elements[index] as Record<string, unknown>) ?? {}}
+                                readOnly={readOnly || inactive}
+                                onChange={onChange}
+                                t={t}
+                                compact
+                            />
+                        ))
+                        : (
+                            <PrimitiveInput
+                                field={field}
+                                value={elements[index]}
+                                readOnly={readOnly || inactive}
+                                t={t}
+                                onChange={(next) => onChange([...path, index], next)}
+                            />
+                        )
+
+                    // A struct element is a card that folds: two fields fit
+                    // today, but nothing about the schema says an element stays
+                    // small, and eight open elements of a dozen fields each is a
+                    // wall the operator has to scroll past to reach the message.
+                    if (!struct) {
+                        return (
+                            <div
+                                key={index}
+                                className={`flex items-start gap-2 px-1.5 py-1 ${inactive ? 'opacity-35 bg-ink-950/60' : 'bg-ink-850/60'}`}
+                                title={inactive
+                                    ? t('field.inactiveSlot', { count: field.countField ?? live })
+                                    : undefined}
+                            >
+                                <span className="w-6 shrink-0 text-ink-500 pt-1">{index}</span>
+                                <div className="flex-1 flex flex-col gap-1.5">{body}</div>
+                            </div>
+                        )
+                    }
                     return (
-                        <div
+                        <ElementCard
                             key={index}
-                            className={`flex items-start gap-2  px-1.5 py-1 ${inactive ? 'opacity-35 bg-ink-950/60' : 'bg-ink-850/60'
-                                }`}
+                            index={index}
+                            inactive={inactive}
+                            summary={summarise(struct, elements[index])}
                             title={inactive
                                 ? t('field.inactiveSlot', { count: field.countField ?? live })
                                 : undefined}
+                            label={t('field.element', { index, name: struct.name })}
+                            defaultOpen={!inactive && live <= 3}
                         >
-                            <span className="w-6 shrink-0 text-ink-500 pt-1">{index}</span>
-                            <div className="flex-1 flex flex-col gap-1.5">
-                                {field.kind === 'STRUCT_ARRAY' && field.struct
-                                    ? field.struct.fields.map((child) => (
-                                        <FieldRow
-                                            key={child.name}
-                                            schema={schema}
-                                            field={child}
-                                            path={[...path, index, child.name]}
-                                            value={(elements[index] as Record<string, unknown>)?.[child.name]}
-                                            siblings={(elements[index] as Record<string, unknown>) ?? {}}
-                                            readOnly={readOnly || inactive}
-                                            onChange={onChange}
-                                            t={t}
-                                            compact
-                                        />
-                                    ))
-                                    : (
-                                        <PrimitiveInput
-                                            field={field}
-                                            value={elements[index]}
-                                            readOnly={readOnly || inactive}
-                                            t={t}
-                                            onChange={(next) => onChange([...path, index], next)}
-                                        />
-                                    )}
-                            </div>
-                        </div>
+                            {body}
+                        </ElementCard>
                     )
                 })}
             </div>
         </fieldset>
     )
+}
+
+/**
+ * One element of a struct array, folded shut until it is wanted.
+ *
+ * <p>Closed it still says what it holds: the summary line carries the element's
+ * first couple of values, so the operator can find the one they are looking for
+ * without opening all eight. Height is animated from a measured height rather
+ * than toggled, because a list that jumps loses the reader's place.
+ */
+function ElementCard({ index, inactive, summary, title, label, defaultOpen, children }: {
+    index: number
+    inactive: boolean
+    summary: string
+    title?: string
+    label: string
+    defaultOpen: boolean
+    children: React.ReactNode
+}) {
+    const [open, setOpen] = useState(defaultOpen)
+    const body = useRef<HTMLDivElement | null>(null)
+    const [height, setHeight] = useState<number | undefined>(defaultOpen ? undefined : 0)
+
+    useEffect(() => {
+        const node = body.current
+        if (!node) return
+        if (!open) {
+            setHeight(0)
+            return
+        }
+        setHeight(node.scrollHeight)
+        // Once it has finished opening the height is released, so a field that
+        // grows -- an array inside the element -- is not clipped by a number
+        // measured before it grew.
+        const timer = window.setTimeout(() => setHeight(undefined), 200)
+        return () => window.clearTimeout(timer)
+    }, [open, children])
+
+    return (
+        <div
+            className={`border ${inactive ? 'border-ink-800 opacity-35 bg-ink-950/60' : 'border-ink-700 bg-ink-850/60'}`}
+            title={title}
+        >
+            <button
+                type="button"
+                className="w-full flex items-center gap-2 px-1.5 py-1 text-left hover:bg-ink-800/60 transition-colors"
+                aria-expanded={open}
+                onClick={() => setOpen((v) => !v)}
+            >
+                <Icon name="chevron" size={11}
+                    className={`text-ink-500 transition-transform duration-150 ${open ? 'rotate-90' : ''}`} />
+                <span className="w-6 shrink-0 text-ink-500">{index}</span>
+                <span className="text-ink-400">{label}</span>
+                {!open && summary && (
+                    <span className="ml-auto num text-ink-500 truncate pl-2">{summary}</span>
+                )}
+            </button>
+            <div
+                className="overflow-hidden transition-[height] duration-150 ease-out"
+                style={{ height: height === undefined ? undefined : `${height}px` }}
+            >
+                <div ref={body} className="flex flex-col gap-1.5 px-1.5 pb-1.5 pl-9">
+                    {children}
+                </div>
+            </div>
+        </div>
+    )
+}
+
+/** The first couple of values, for the closed card's own line. */
+function summarise(struct: { fields: FieldDef[] }, element: unknown): string {
+    if (!element || typeof element !== 'object') return ''
+    const bag = element as Record<string, unknown>
+    return struct.fields.slice(0, 2)
+        .map((f) => {
+            const raw = bag[f.name]
+            if (typeof raw === 'number') {
+                return `${f.name} ${Number.isInteger(raw) ? raw : raw.toFixed(2)}`
+            }
+            return raw === undefined ? null : `${f.name} ${String(raw)}`
+        })
+        .filter(Boolean)
+        .join('  ·  ')
 }
 
 function Labelled({ field, compact, children }: {
@@ -264,12 +370,12 @@ function PrimitiveInput({ field, value, readOnly, onChange, t }: {
               wire, so it is shown rather than silently snapped to a known one. */}
                     {!known && <option value="__other">{t('field.notNamed', { value: current })}</option>}
                 </select>
-                <input
+                <NumberField
                     className="field w-24"
-                    type="number"
+                    integer
                     value={Number(value ?? 0)}
                     disabled={readOnly}
-                    onChange={(e) => onChange(Number(e.target.value))}
+                    onChange={onChange}
                 />
             </div>
         )
@@ -277,19 +383,15 @@ function PrimitiveInput({ field, value, readOnly, onChange, t }: {
 
     const isFloat = field.type === 'f32' || field.type === 'f64'
     return (
-        <input
-            className="field"
-            type="number"
+        <NumberField
+            integer={!isFloat}
             step={isFloat ? 'any' : 1}
             min={range?.[0]}
             max={range?.[1]}
             value={Number.isFinite(Number(value)) ? Number(value) : 0}
             disabled={readOnly}
             title={range ? `${field.type} · ${range[0]} … ${range[1]}` : field.type}
-            onChange={(e) => {
-                const parsed = Number(e.target.value)
-                onChange(Number.isFinite(parsed) ? parsed : 0)
-            }}
+            onChange={onChange}
         />
     )
 }

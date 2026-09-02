@@ -27,6 +27,11 @@ public final class SchemaModel {
     private final int msgIdOffset;
     private final int timestampOffset;
     private final int msgLengthOffset;
+    private final int senderIdWidth;
+    private final int receiverIdWidth;
+    private final int msgIdWidth;
+    private final int timestampWidth;
+    private final int msgLengthWidth;
 
     private final List<ModuleDef> modules;
     private final ModuleDef dkmModule;
@@ -49,11 +54,26 @@ public final class SchemaModel {
         this.sizeTBytes = sizeTBytes;
         this.littleEndian = littleEndian;
         this.header = header;
-        this.senderIdOffset = header.requireField("sender_id").offset;
-        this.receiverIdOffset = header.requireField("receiver_id").offset;
-        this.msgIdOffset = header.requireField("msg_id").offset;
-        this.timestampOffset = header.requireField("timestamp").offset;
-        this.msgLengthOffset = header.requireField("msg_length").offset;
+        CompiledField sender = header.requireField("sender_id");
+        CompiledField receiver = header.requireField("receiver_id");
+        CompiledField id = header.requireField("msg_id");
+        CompiledField clock = header.requireField("timestamp");
+        CompiledField length = header.requireField("msg_length");
+        this.senderIdOffset = sender.offset;
+        this.receiverIdOffset = receiver.offset;
+        this.msgIdOffset = id.offset;
+        this.timestampOffset = clock.offset;
+        this.msgLengthOffset = length.offset;
+        // Each field's own width, not the target's word size. They coincide when
+        // the header is declared in size_t, which is the only shape this repo's
+        // own schema has -- so an interface that declares any of them narrower
+        // would otherwise be read eight bytes at a time, pulling the next field
+        // in behind it and producing a length no message could have.
+        this.senderIdWidth = sender.size;
+        this.receiverIdWidth = receiver.size;
+        this.msgIdWidth = id.size;
+        this.timestampWidth = clock.size;
+        this.msgLengthWidth = length.size;
 
         this.modules = List.copyOf(modules);
         this.structs = Map.copyOf(structs);
@@ -120,6 +140,11 @@ public final class SchemaModel {
     public int msgIdOffset() { return msgIdOffset; }
     public int timestampOffset() { return timestampOffset; }
     public int msgLengthOffset() { return msgLengthOffset; }
+    public int senderIdWidth() { return senderIdWidth; }
+    public int receiverIdWidth() { return receiverIdWidth; }
+    public int msgIdWidth() { return msgIdWidth; }
+    public int timestampWidth() { return timestampWidth; }
+    public int msgLengthWidth() { return msgLengthWidth; }
 
     public List<ModuleDef> modules() { return modules; }
 

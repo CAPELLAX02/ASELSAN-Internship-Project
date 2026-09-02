@@ -109,6 +109,8 @@ export interface MessageSummary {
     problem: string | null
     origin: string | null
     sent: boolean
+    /** Passed over: the run began after it. Never sent, still editable. */
+    skipped: boolean
     wallClock: number
     direction: Direction | null
     editable: boolean

@@ -34,17 +34,45 @@ public final class FrameSplitter {
     private final Wire wire;
     private final int headerSize;
     private final int msgLengthOffset;
-    private final int sizeTBytes;
+    private final int msgLengthWidth;
     private final int maxMessageBytes;
 
     private ByteBuf carry;
 
-    public FrameSplitter(Wire wire, int headerSize, int msgLengthOffset, int sizeTBytes, int maxMessageBytes) {
+    /**
+     * @param msgLengthWidth the declared width of {@code msg_length}, which is
+     *                       not necessarily the target's word size: an interface
+     *                       may carry the length in four bytes on a 64-bit build.
+     */
+    public FrameSplitter(Wire wire, int headerSize, int msgLengthOffset, int msgLengthWidth, int maxMessageBytes) {
         this.wire = wire;
         this.headerSize = headerSize;
         this.msgLengthOffset = msgLengthOffset;
-        this.sizeTBytes = sizeTBytes;
+        this.msgLengthWidth = msgLengthWidth;
         this.maxMessageBytes = maxMessageBytes;
+    }
+
+    /**
+     * The first bytes of what the peer actually sent, grouped in eights.
+     *
+     * <p>Grouped rather than run together because the reader is comparing this
+     * against a C++ struct, and the question is always which field starts where.
+     */
+    static String hexPreview(ByteBuf src, int base, int readable) {
+        int count = Math.min(readable, 32);
+        StringBuilder out = new StringBuilder(count * 3 + 8);
+        for (int i = 0; i < count; i++) {
+            if (i > 0 && i % 8 == 0) {
+                out.append(" | ");
+            } else if (i > 0) {
+                out.append(' ');
+            }
+            out.append(String.format("%02x", src.getByte(base + i) & 0xff));
+        }
+        if (readable > count) {
+            out.append(" ...");
+        }
+        return out.toString();
     }
 
     public void feed(ByteBuf in, FrameHandler handler) {
@@ -65,12 +93,20 @@ public final class FrameSplitter {
                 break;
             }
             int base = src.readerIndex();
-            long declared = wire.readUnsigned(src, base + msgLengthOffset, sizeTBytes);
+            long declared = wire.readUnsigned(src, base + msgLengthOffset, msgLengthWidth);
             if (declared < headerSize || declared > maxMessageBytes) {
+                // The bytes themselves, because the number alone cannot tell the
+                // two causes apart. A stream that genuinely desynchronised looks
+                // like noise here; a header the schema describes wrongly looks
+                // like a perfectly sensible message read from the wrong offsets,
+                // and the only way to see which is to put the peer's own bytes
+                // next to the struct it was supposed to have sent.
                 throw new DesyncException("msg_length = " + Long.toUnsignedString(declared)
                         + " is not a plausible message size (header is " + headerSize
-                        + " bytes, ceiling is " + maxMessageBytes
-                        + ") -- the stream is out of sync or the peer's data model differs");
+                        + " bytes, read " + msgLengthWidth + " bytes at offset " + msgLengthOffset
+                        + ", ceiling is " + maxMessageBytes
+                        + ") -- the stream is out of sync or the peer's data model differs."
+                        + " First bytes on the wire: " + hexPreview(src, base, readable));
             }
             int length = (int) declared;
             if (readable < length) {

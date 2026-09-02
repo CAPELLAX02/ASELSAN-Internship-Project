@@ -170,7 +170,7 @@ body {
     color: var(--c-200);
     font-family: var(--font-sans);
     font-size: var(--text-body);
-    line-height: 1.5;
+    line-height: 1.4;
     font-weight: 500;
     -webkit-font-smoothing: auto;
     overscroll-behavior: none;
@@ -369,6 +369,15 @@ input[type="range"] {
     /* Kept and saved byte for byte, but the run will skip it (NFR-5). */
     .badge-blocked {
         @apply border-danger/50 text-danger bg-danger/14;
+    }
+
+    /*
+     * Passed over because the run was told to start further down. Deliberately
+     * the quietest of the five: nothing happened to this message, and it must
+     * not read as an event beside the ones that did.
+     */
+    .badge-skipped {
+        @apply border-ink-600 text-ink-400 bg-ink-800;
     }
 
     /* Came back from the DKM. Read-only, always. */

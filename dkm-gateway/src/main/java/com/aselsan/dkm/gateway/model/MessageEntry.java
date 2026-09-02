@@ -48,6 +48,21 @@ public final class MessageEntry {
     public boolean sent;
 
     /**
+     * Passed over because the run was told to begin further down the list.
+     *
+     * <p>Distinct from {@link #sent}, which the whole interface reads as "this
+     * crossed the wire". Both keep a message out of the plan, but only one of
+     * them is a claim about what the DKM received, and showing an operator that
+     * eighty messages were sent when the run deliberately started at the
+     * eighty-first is simply false.
+     *
+     * <p>A skipped message stays editable: it was never sent, and it is the
+     * obvious thing to reach for when the operator decides to start earlier
+     * after all.
+     */
+    public boolean skipped;
+
+    /**
      * When this message crossed the wire, as epoch milliseconds: set by the
      * pacer for stimulus, and at append time for capture. One field for both
      * directions is what lets the session trace merge them into a single

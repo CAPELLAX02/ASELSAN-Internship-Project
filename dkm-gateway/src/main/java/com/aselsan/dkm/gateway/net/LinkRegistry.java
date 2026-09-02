@@ -91,7 +91,7 @@ public class LinkRegistry {
     private FrameSplitter newSplitter() {
         SchemaModel schema = schemaService.model();
         return new FrameSplitter(schemaService.wire(), schema.headerSize(), schema.msgLengthOffset(),
-                schema.sizeTBytes(), config.maxMessageBytes());
+                schema.msgLengthWidth(), config.maxMessageBytes());
     }
 
     private void bind(Link link) {

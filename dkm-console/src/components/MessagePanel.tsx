@@ -4,6 +4,7 @@ import { api } from '../api/client'
 import type { MessagePage, MessageSummary, SortDir, SortKey, TraceRow } from '../api/types'
 import { useT, type Translate } from '../i18n/useT'
 import { useStore } from '../store/useStore'
+import { useListReorder } from './useListReorder'
 import { Icon } from './Icon'
 import { AlertDialog } from './AlertDialog'
 import { clockTime, count } from './format'
@@ -66,8 +67,7 @@ export function MessagePanel({ selection, onSelect }: {
     /** Keep the message currently going out in view during a run. */
     const [followRun, setFollowRun] = useState(true)
     const [askDelete, setAskDelete] = useState<MessageSummary | null>(null)
-    const [dragId, setDragId] = useState<number | null>(null)
-    const [dropIndex, setDropIndex] = useState<number | null>(null)
+
 
     const schema = useStore((s) => s.schema)
     const sessionVersion = useStore((s) => s.sessionVersion)
@@ -88,22 +88,43 @@ export function MessagePanel({ selection, onSelect }: {
 
     const version = mode === 'input' ? sessionVersion : captureVersion
 
+    /**
+     * Which request is the current one.
+     *
+     * <p>Loads overlap: every edit bumps the session version and asks for the
+     * page again, and a run bumps it many times a second. Responses are not
+     * guaranteed to arrive in the order they were sent, so without a token an
+     * older reply can land after a newer one and put the list back the way it
+     * was before the edit -- which looks exactly like the edit not having
+     * worked, intermittently, and only when the operator is quick.
+     */
+    const request = useRef(0)
+
     const load = useCallback(async () => {
+        const ticket = ++request.current
         setLoading(true)
         try {
             if (mode === 'trace') {
                 const result = await api.trace({ link, limit: 1000 })
+                if (ticket !== request.current) return
                 setTrace(result.items)
             } else if (mode === 'input') {
-                setPage(await api.sessionMessages({ link, type, status, sort, dir, offset, limit: PAGE }))
+                const result = await api.sessionMessages({ link, type, status, sort, dir, offset, limit: PAGE })
+                if (ticket !== request.current) return
+                setPage(result)
             } else {
-                setPage(await api.captureMessages({ link, type, sort, dir, offset, limit: PAGE, tail: follow }))
+                const result = await api.captureMessages({ link, type, sort, dir, offset, limit: PAGE, tail: follow })
+                if (ticket !== request.current) return
+                setPage(result)
             }
             setError(null)
         } catch (cause) {
+            if (ticket !== request.current) return
             setError((cause as Error).message)
         } finally {
-            setLoading(false)
+            // Only the newest request owns the spinner; an overtaken one
+            // clearing it would hide that a fetch is still in flight.
+            if (ticket === request.current) setLoading(false)
         }
     }, [mode, link, type, status, sort, dir, offset, follow])
 
@@ -186,9 +207,15 @@ export function MessagePanel({ selection, onSelect }: {
         const rows = page.items as MessageSummary[]
         if (rows.length === 0) return
 
-        const pending = rows.findIndex((row) => !row.sent)
+        // The run's frontier is the first message it still has to send. Skipped
+        // rows are behind it just as surely as sent ones are: a run started at
+        // message 4000 has three thousand nine hundred and ninety-nine rows in
+        // front of it that will never go out, and following the first row that
+        // merely is not sent would park the view on the first of them and stay
+        // there for the whole run.
+        const pending = rows.findIndex((row) => !row.sent && !row.skipped)
 
-        // Every row here has gone out. The run is on the next page now.
+        // Nothing here is still to go. The run is on a later page.
         if (pending < 0) {
             if (loaded + PAGE < page.filtered) {
                 turning.current = true
@@ -215,7 +242,6 @@ export function MessagePanel({ selection, onSelect }: {
     const items: (MessageSummary | TraceRow)[] = mode === 'trace' ? trace : (page?.items ?? [])
     const first = Math.max(0, Math.floor(viewport.top / ROW_HEIGHT) - OVERSCAN)
     const last = Math.min(items.length, Math.ceil((viewport.top + viewport.height) / ROW_HEIGHT) + OVERSCAN)
-    const visible = items.slice(first, last)
 
     const types = useMemo(() => {
         if (!schema) return []
@@ -234,13 +260,78 @@ export function MessagePanel({ selection, onSelect }: {
 
     const indexOfId = (id: number) => items.findIndex((row) => row.id === id)
 
+    /**
+     * Puts the row where it was dropped, before the gateway has been asked.
+     *
+     * <p>Without this the drop reads as a stutter: the transforms that opened
+     * the gap are cleared the moment the pointer is released, so every row snaps
+     * back to where it started and only lands in its new place a round trip
+     * later. Reordering the page here means the same render that drops the
+     * transforms already carries the new order, and the row simply is where it
+     * was put.
+     *
+     * <p>Timestamps are left to the refresh. A move preserves each message's
+     * delta by design, so the column the operator is almost certainly reading is
+     * right immediately; the absolute times catch up when the page comes back.
+     */
+    const reorderLocally = (id: number, toIndexInPage: number) => {
+        setPage((current) => {
+            if (!current) return current
+            const rows = [...(current.items as MessageSummary[])]
+            const from = rows.findIndex((row) => row.id === id)
+            if (from < 0 || from === toIndexInPage) return current
+            const [moved] = rows.splice(from, 1)
+            rows.splice(Math.min(toIndexInPage, rows.length), 0, moved)
+            return { ...current, items: rows }
+        })
+    }
+
     const moveTo = async (id: number, toIndexInPage: number) => {
         const result = await run(
             () => api.moveMessage(id, offset + toIndexInPage), t('list.moved', { index: toIndexInPage + 1 }))
+        // Either way the list has to be refetched: on success for the recomputed
+        // timestamps, on failure because the order on screen is now a guess that
+        // the gateway did not agree to.
+        touchSession()
         if (result) {
-            touchSession()
             notify('INFO', t('list.moved', { index: count(result.index + 1) }))
         }
+    }
+
+    /**
+     * Dragging a row to a new position.
+     *
+     * <p>The commit reorders the page here first and asks the gateway second, so
+     * the render that ends the drag already carries the new order: there is no
+     * frame in which the row is back where it started.
+     */
+    const reorder = useListReorder({
+        count: items.length,
+        rowHeight: ROW_HEIGHT,
+        scrollRef,
+        enabled: reorderable,
+        // Sent messages form a prefix -- the run goes in order -- so the first
+        // one still to go is the highest slot anything may be dropped into.
+        floor: Math.max(0, (items as MessageSummary[]).findIndex((row) => !row.sent)),
+        onCommit: (id, toIndex) => {
+            reorderLocally(id, toIndex)
+            void moveTo(id, toIndex)
+        },
+    })
+
+    /**
+     * The rows actually rendered: the window, plus the one being dragged.
+     *
+     * <p>The list is windowed, so a row dragged far enough -- or carried away by
+     * the edge scroll -- leaves the rendered range and would simply vanish from
+     * under the pointer. It is appended explicitly instead: its position comes
+     * from the pointer, not from the window, so it stays exactly where the hand
+     * is however far the view has travelled.
+     */
+    const windowRows = items.slice(first, last).map((item, index) => ({ item, absolute: first + index }))
+    const liftedIndex = reorder.state?.from
+    if (liftedIndex !== undefined && (liftedIndex < first || liftedIndex >= last) && items[liftedIndex]) {
+        windowRows.push({ item: items[liftedIndex], absolute: liftedIndex })
     }
 
     const copySelected = async () => {
@@ -324,7 +415,20 @@ export function MessagePanel({ selection, onSelect }: {
                 return
             }
             const accel = event.ctrlKey || event.metaKey
-            if (accel && event.key.toLowerCase() === 'c') {
+            // Undo first: Ctrl+Z is reached for reflexively after a mistake, and
+            // it should not have to compete with anything.
+            if (accel && event.key.toLowerCase() === 'z') {
+                if (running) return
+                const redo = event.shiftKey
+                if (redo ? !page?.canRedo : !page?.canUndo) return
+                event.preventDefault()
+                void step(redo ? 'redo' : 'undo')
+            } else if (accel && event.key.toLowerCase() === 'y' && !event.shiftKey) {
+                // The other convention for redo, for hands that learned it there.
+                if (running || !page?.canRedo) return
+                event.preventDefault()
+                void step('redo')
+            } else if (accel && event.key.toLowerCase() === 'c') {
                 if (!selection || selection.mode !== 'input') return
                 event.preventDefault()
                 void copySelected()
@@ -565,8 +669,7 @@ export function MessagePanel({ selection, onSelect }: {
             <div ref={scrollRef} className="flex-1 overflow-auto min-h-0 relative">
                 <LoadingOverlay show={loading && items.length === 0} />
                 <div style={{ height: items.length * ROW_HEIGHT }} className="relative">
-                    {visible.map((item, index) => {
-                        const absolute = first + index
+                    {windowRows.map(({ item, absolute }) => {
                         if (mode === 'trace') {
                             return (
                                 <TraceRowView
@@ -584,6 +687,7 @@ export function MessagePanel({ selection, onSelect }: {
                         }
                         const row = item as MessageSummary
                         const previous = absolute > 0 ? (items[absolute - 1] as MessageSummary) : null
+                        const lifted = reorder.state?.id === row.id
                         return (
                             <Row
                                 key={row.id}
@@ -592,21 +696,24 @@ export function MessagePanel({ selection, onSelect }: {
                                 shownTime={timeMode === 'delta' && previous
                                     ? `+${row.timestamp - previous.timestamp}`
                                     : String(row.timestamp)}
-                                top={absolute * ROW_HEIGHT}
+                                top={lifted ? reorder.state!.y : absolute * ROW_HEIGHT}
                                 selected={selection?.mode === mode && selection.id === row.id}
                                 draggable={reorderable && !row.sent}
-                                dragging={dragId === row.id}
-                                dropBefore={dropIndex === absolute}
-                                onClick={() => onSelect({
-                                    mode: mode as 'input' | 'output', id: row.id, index: offset + absolute,
-                                })}
-                                onDragStart={() => setDragId(row.id)}
-                                onDragOver={() => setDropIndex(absolute)}
-                                onDragEnd={() => { setDragId(null); setDropIndex(null) }}
-                                onDrop={(draggedId) => {
-                                    setDragId(null)
-                                    setDropIndex(null)
-                                    if (draggedId !== row.id) void moveTo(draggedId, absolute)
+                                lifted={lifted}
+                                shift={reorder.shiftFor(absolute)}
+                                settling={reorder.state !== null}
+                                onClick={() => {
+                                    // The pointer-up that ends a drag also lands
+                                    // here; selecting the row it happened to
+                                    // finish over is not what was asked for.
+                                    if (reorder.takeClickSuppression()) return
+                                    onSelect({
+                                        mode: mode as 'input' | 'output', id: row.id, index: offset + absolute,
+                                    })
+                                }}
+                                onGrab={(event) => {
+                                    if (!reorderable || row.sent) return
+                                    reorder.begin(event, row.id, absolute)
                                 }}
                             />
                         )
@@ -765,8 +872,8 @@ function Tab({ active, onClick, children }: {
 }
 
 function Row({
-    t, item, shownTime, top, selected, draggable, dragging, dropBefore,
-    onClick, onDragStart, onDragOver, onDragEnd, onDrop,
+    t, item, shownTime, top, selected, draggable, lifted, shift, settling,
+    onClick, onGrab,
 }: {
     t: Translate
     item: MessageSummary
@@ -774,14 +881,14 @@ function Row({
     top: number
     selected: boolean
     draggable: boolean
-    dragging: boolean
-    dropBefore: boolean
+    /** This row is the one in the air, following the pointer. */
+    lifted: boolean
+    /** Pixels this row moves to open the gap. */
+    shift: number
+    /** A drag is in progress somewhere in the list, so movement should animate. */
+    settling: boolean
     onClick: () => void
-    onDragStart: () => void
-    onDragOver: () => void
-    onDragEnd: () => void
-    /** The id being dragged, read from the drag payload rather than from state. */
-    onDrop: (draggedId: number) => void
+    onGrab: (event: React.PointerEvent<HTMLElement>) => void
 }) {
     // FR-31: three visually distinct states — editable stimulus, sent history,
     // and read-only capture — plus a fourth for anything that cannot be trusted.
@@ -796,50 +903,50 @@ function Row({
     return (
         <button
             onClick={onClick}
-            draggable={draggable}
-            onDragStart={(event) => {
-                event.dataTransfer.effectAllowed = 'move'
-                // Firefox refuses to start a drag without payload on the transfer.
-                event.dataTransfer.setData('text/plain', String(item.id))
-                onDragStart()
+            onPointerDown={onGrab}
+            style={{
+                top,
+                height: ROW_HEIGHT,
+                transform: shift ? `translateY(${shift}px)` : undefined,
+                // The lifted row leaves the flow of the list: it is above
+                // everything, casts a shadow so it reads as picked up rather
+                // than merely highlighted, and never animates -- it is following
+                // a pointer, and a transition would make it lag behind the hand.
+                zIndex: lifted ? 30 : undefined,
+                transition: lifted
+                    ? 'none'
+                    : settling
+                        ? 'transform 160ms cubic-bezier(0.2, 0, 0, 1), background-color 100ms'
+                        : 'background-color 100ms linear',
+                boxShadow: lifted ? '0 10px 24px -6px rgb(0 0 0 / 0.55)' : undefined,
+                cursor: lifted ? 'grabbing' : undefined,
             }}
-            onDragOver={(event) => {
-                if (!draggable) return
-                event.preventDefault()
-                event.dataTransfer.dropEffect = 'move'
-                onDragOver()
-            }}
-            onDragEnd={onDragEnd}
-            onDrop={(event) => {
-                event.preventDefault()
-                // The dragged id travels on the transfer, not in React state: the
-                // drop handler bound to this row was created before the drag
-                // began, so a state read here would see whatever was there then.
-                const dragged = Number(event.dataTransfer.getData('text/plain'))
-                if (Number.isFinite(dragged) && dragged > 0) onDrop(dragged)
-            }}
-            style={{ top, height: ROW_HEIGHT }}
             className={`group absolute left-0 right-0 flex items-center gap-2 pr-2 text-left border-l-2
-                transition-[background-color,opacity] duration-100
-                ${dragging ? 'opacity-35' : ''}
-                ${dropBefore ? 'before:absolute before:left-0 before:right-0 before:-top-px before:h-0.5 before:bg-signal before:content-[\'\']' : ''}
+                border-b border-b-ink-800 select-none
+                ${lifted
+                    ? 'bg-ink-850 border-l-signal ring-1 ring-signal/60'
+                    : ''}
                 ${selected
                     ? 'bg-signal-dim/25 border-l-signal'
-                    : `border-l-transparent hover:bg-ink-800 ${item.sent && !item.problem ? 'bg-ink-950/50' : ''}`
+                    : `border-l-transparent ${lifted ? '' : 'hover:bg-ink-800'} ${item.sent && !item.problem ? 'bg-ink-950/50' : ''}`
                 }`}
-            title={item.problem ?? item.preview}
         >
+            {/* One step off the ground rather than two: on the pale theme a
+                separator any lighter than this disappears into white. It is also
+                exactly the hover background, so the rule dissolves under the
+                cursor and the hovered row reads as one unbroken band. */}
             {/* A grip, shown only where dragging does something. Two dotted rules
                 rather than an icon font: it reads as a handle at 26px and costs
                 nothing. */}
             <span
                 aria-hidden="true"
-                className={`w-3 shrink-0 self-stretch flex items-center justify-center
-                    ${draggable ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                className={`w-3 shrink-0 self-stretch flex items-center justify-center touch-none
+                    ${draggable ? (lifted ? 'cursor-grabbing' : 'cursor-grab') : ''}`}
             >
                 {draggable && (
                     <Icon name="grip" size={11}
-                        className="text-ink-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        className={`transition-opacity duration-100
+                            ${lifted ? 'text-signal opacity-100' : 'text-ink-600 opacity-0 group-hover:opacity-100'}`} />
                 )}
             </span>
             <span className="w-20 shrink-0 truncate text-ink-500 tabular-nums">{shownTime}</span>
@@ -850,12 +957,16 @@ function Row({
             <span className="flex-1 truncate text-ink-500">{item.preview}</span>
             <span className="w-[76px] shrink-0 flex justify-end">
                 {item.problem
-                    ? <span className="badge badge-blocked">{t('row.blocked')}</span>
+                    ? <span className="badge badge-blocked" title={item.problem}>{t('row.blocked')}</span>
                     : item.direction === 'FROM_DKM'
                         ? <span className="badge badge-capture">{t('inspector.fromDkm')}</span>
                         : item.sent
                             ? <span className="badge badge-sent">{t('row.sent')}</span>
-                            : <span className="badge badge-pending">{t('row.pending')}</span>}
+                            : item.skipped
+                                ? <span className="badge badge-skipped" title={t('row.skippedTitle')}>
+                                    {t('row.skipped')}
+                                </span>
+                                : <span className="badge badge-pending">{t('row.pending')}</span>}
             </span>
         </button>
     )

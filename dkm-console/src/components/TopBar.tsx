@@ -24,7 +24,12 @@ const THEME_ORDER: ThemeChoice[] = ['system', 'light', 'dark']
 
 const THEME_ICON: Record<string, IconName> = { dark: 'moon', light: 'sun', system: 'monitor' }
 
-export function TopBar({ selection }: { selection: Selection | null }) {
+export function TopBar({ selection, onResetLayout, layoutMoved }: {
+    selection: Selection | null
+    onResetLayout: () => void
+    /** Whether any seam has been moved, so the control can disable itself. */
+    layoutMoved: boolean
+}) {
     const t = useT()
     const links = useStore((s) => s.links)
     const playback = useStore((s) => s.playback)
@@ -235,7 +240,7 @@ export function TopBar({ selection }: { selection: Selection | null }) {
                     </span>
                 </div>
 
-                <Settings />
+                <Settings onResetLayout={onResetLayout} layoutMoved={layoutMoved} />
             </div>
 
             <div className="flex items-center gap-2 px-3 pb-2 flex-wrap">
@@ -441,7 +446,10 @@ export function TopBar({ selection }: { selection: Selection | null }) {
     )
 }
 
-function Settings() {
+function Settings({ onResetLayout, layoutMoved }: {
+    onResetLayout: () => void
+    layoutMoved: boolean
+}) {
     const t = useT()
     const lang = useStore((s) => s.lang)
     const setLang = useStore((s) => s.setLang)
@@ -484,6 +492,19 @@ function Settings() {
                     </button>
                 ))}
             </div>
+
+            {/* Beside the other things that are about the console rather than the
+                run. Disabled when nothing has moved, so it reports the state of
+                the layout as well as changing it. */}
+            <button
+                className="btn text-mini py-0.5 px-2"
+                onClick={onResetLayout}
+                disabled={!layoutMoved}
+                title={t('layout.reset')}
+                aria-label={t('layout.reset')}
+            >
+                <Icon name="layout" size={13} />
+            </button>
 
             <button
                 className="btn text-mini py-0.5 px-2"

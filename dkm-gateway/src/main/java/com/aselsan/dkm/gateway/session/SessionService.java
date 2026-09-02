@@ -353,7 +353,15 @@ public class SessionService {
             }
             List<MessageEntry> list = messages.entries();
             int from = messages.indexOf(id);
-            int to = Math.min(Math.max(toIndex, 0), list.size() - 1);
+            // Sent messages are history. A move rewrites the absolute times of
+            // everything between the two positions, so landing inside the sent
+            // prefix would restate when the DKM received messages it has already
+            // received. The target stops at the first message still to go.
+            int floor = 0;
+            while (floor < list.size() && list.get(floor).sent) {
+                floor++;
+            }
+            int to = Math.min(Math.max(toIndex, floor), list.size() - 1);
             if (from < 0) {
                 return -1;
             }
@@ -562,7 +570,7 @@ public class SessionService {
 
     /**
      * Clears the sent markers, then marks everything before {@code fromId} as
-     * already sent so the next run begins there (0 means the whole set).
+     * skipped so the next run begins there (0 means the whole set).
      *
      * <p>Expressed through the sent markers rather than as a separate "start
      * index" because that is where the engine already looks: FR-14 rebuilds the
@@ -578,7 +586,10 @@ public class SessionService {
                 if (before && entry.id == fromId) {
                     before = false;
                 }
-                entry.sent = before;
+                // Skipped, not sent: the plan treats the two alike, the operator
+                // must not. See MessageEntry.skipped.
+                entry.sent = false;
+                entry.skipped = before;
                 entry.wallClock = 0;
             }
             publishReloaded();

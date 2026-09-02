@@ -110,6 +110,15 @@ interface Segment {
     fromOutput: boolean
     /** This segment's own fade time, in milliseconds. See {@link Scene.raysLifetimeMs}. */
     lifetime: number
+    /**
+     * The message declared no length, so the ray is a bearing rather than a
+     * reach: it is drawn to the edge of whatever is on screen, at any zoom.
+     *
+     * <p>A fixed length would be a claim the DKM never made -- and one that
+     * looks wrong from both sides, stopping short when zoomed out and vanishing
+     * off the edge when zoomed in.
+     */
+    unbounded: boolean
 }
 
 /**
@@ -191,6 +200,15 @@ export class Scene {
     readonly rects = new Map<string, Area>()
     rays: Segment[] = []
     lines: Segment[] = []
+
+    /**
+     * How far out the display currently reaches, in metres.
+     *
+     * <p>Set by the renderer each frame. Rays with no declared length are drawn
+     * to here, and picked to here, so what answers the cursor is exactly what
+     * was drawn.
+     */
+    viewRadius = 2000
 
     /** Fade time for transient marks, in milliseconds. */
     pointLifetimeMs = 8000
@@ -358,13 +376,15 @@ export class Scene {
             case KIND.RAY: {
                 // c is the ray length, d the bearing in radians -- the same convention
                 // the DKM computes with (x = r cos h, y = r sin h).
-                const length = c || 2000
+                const unbounded = !(c > 0)
+                const length = unbounded ? 1 : c
                 this.rays.push({
                     x1: 0, y1: 0,
                     x2: Math.cos(d) * length, y2: Math.sin(d) * length,
                     color, birth: now, dashed: style?.dashed ?? false,
                     link, msgId, heading: d, fromOutput,
                     lifetime: style?.persistenceMs ?? this.raysLifetimeMs,
+                    unbounded,
                 })
                 if (this.rays.length > MAX_RAYS) this.rays.splice(0, this.rays.length - MAX_RAYS)
                 break
@@ -375,6 +395,7 @@ export class Scene {
                     dashed: style?.dashed ?? false,
                     link, msgId, heading: Math.atan2(f - b, e - a), fromOutput,
                     lifetime: style?.persistenceMs ?? this.raysLifetimeMs,
+                    unbounded: false,
                 })
                 if (this.lines.length > MAX_LINES) this.lines.splice(0, this.lines.length - MAX_LINES)
                 break
@@ -525,7 +546,8 @@ export class Scene {
     /**
      * What is under the cursor, in world coordinates.
      *
-     * <p>Marks win over lines, and lines over areas: a detection sitting inside a
+     * <p>Marks win over track lines, track lines over rays, and rays over areas:
+     * a detection sitting inside a
      * reporting area is almost always the thing being pointed at, and an area is
      * large enough to be hit anywhere else. Faded marks are skipped, and so are
      * types switched off in the legend: something invisible should not answer to
@@ -573,6 +595,49 @@ export class Scene {
             }
         }
 
+        // A track is the line as much as the marks: the connecting line is what
+        // makes a scatter of observations one object, and it is most of what the
+        // cursor can actually land on -- the marks are a few pixels each, while
+        // the line between them runs the length of the track's whole history.
+        {
+            let bestTrack: Track | null = null
+            let bestDistance = tolerance
+            for (const track of this.tracks.values()) {
+                if (track.count < 2 || this.isHidden(track.link, track.msgId)) continue
+                const capacity = track.xs.length
+                const oldest = (track.head - track.count + capacity) % capacity
+                for (let i = 1; i < track.count; i++) {
+                    const a = (oldest + i - 1) % capacity
+                    const b = (oldest + i) % capacity
+                    const d = distanceToSegment(x, y,
+                        track.xs[a], track.ys[a], track.xs[b], track.ys[b])
+                    if (d < bestDistance) {
+                        bestDistance = d
+                        bestTrack = track
+                    }
+                }
+            }
+            if (bestTrack) {
+                return {
+                    kind: 'track',
+                    link: bestTrack.link,
+                    msgId: bestTrack.msgId,
+                    output: bestTrack.fromOutput,
+                    // The head of the track: hovering anywhere on it asks about
+                    // the object, and where the object is now is the answer.
+                    x: bestTrack.lastX,
+                    y: bestTrack.lastY,
+                    distance: Math.hypot(bestTrack.lastX, bestTrack.lastY),
+                    heading: Math.atan2(bestTrack.lastY, bestTrack.lastX),
+                    vx: bestTrack.vx,
+                    vy: bestTrack.vy,
+                    trackId: bestTrack.id,
+                    points: bestTrack.count,
+                    ageMs: now - bestTrack.lastSeen,
+                }
+            }
+        }
+
         for (const list of [this.rays, this.lines]) {
             for (let i = list.length - 1; i >= 0; i--) {
                 const segment = list[i]
@@ -580,7 +645,11 @@ export class Scene {
                     || this.isHidden(segment.link, segment.msgId)) {
                     continue
                 }
-                if (distanceToSegment(x, y, segment.x1, segment.y1, segment.x2, segment.y2) <= tolerance) {
+                const reach = segment.unbounded
+                    ? { x: Math.cos(segment.heading) * this.viewRadius,
+                        y: Math.sin(segment.heading) * this.viewRadius }
+                    : { x: segment.x2, y: segment.y2 }
+                if (distanceToSegment(x, y, segment.x1, segment.y1, reach.x, reach.y) <= tolerance) {
                     return {
                         kind: 'ray',
                         link: segment.link,

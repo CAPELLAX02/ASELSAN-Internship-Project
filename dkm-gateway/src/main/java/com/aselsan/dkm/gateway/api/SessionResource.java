@@ -132,7 +132,8 @@ public class SessionResource {
         if (status != null && !status.isBlank()) {
             return switch (status.toLowerCase(java.util.Locale.ROOT)) {
                 case "sent" -> entry.sent;
-                case "pending" -> !entry.sent;
+                case "skipped" -> entry.skipped;
+                case "pending" -> !entry.sent && !entry.skipped;
                 case "problem" -> entry.problem != null;
                 default -> true;
             };

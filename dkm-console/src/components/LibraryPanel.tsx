@@ -5,6 +5,7 @@ import type { LibraryItem } from '../api/types'
 import { useT } from '../i18n/useT'
 import { useStore } from '../store/useStore'
 import { Icon } from './Icon'
+import { NumberField } from './NumberField'
 import { AlertDialog } from './AlertDialog'
 import { count } from './format'
 import { LoadingSpinner } from './LoadingSpinner'
@@ -147,8 +148,8 @@ export function LibraryPanel({ selection }: { selection: Selection | null }) {
                     </div>
                     <label className="flex items-center gap-2">
                         <span className="w-24 shrink-0 text-ink-400">{t('new.offset')}</span>
-                        <input className="field py-0.5" type="number" value={offsetMillis}
-                            onChange={(e) => setOffsetMillis(Number(e.target.value))} />
+                        <NumberField className="field py-0.5" integer min={0}
+                            value={offsetMillis} onChange={setOffsetMillis} />
                     </label>
                 </div>
             )}

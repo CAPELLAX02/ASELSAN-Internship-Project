@@ -49,6 +49,7 @@ public class MessageViews {
         node.put("problem", entry.problem);
         node.put("origin", entry.origin == null ? null : entry.origin.name());
         node.put("sent", entry.sent);
+        node.put("skipped", entry.skipped);
         node.put("wallClock", entry.wallClock);
 
         CompiledMessage type = entry.typeName == null ? null : schemaService.model().message(entry.typeName);
