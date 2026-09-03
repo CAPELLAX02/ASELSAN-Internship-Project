@@ -32,7 +32,7 @@ void RspComm::dispatch(const MsgHeader& header)
             break;
         }
         default:
-            skip_body(header, body_size(header));
+            skip_body(header, body_size(header) + sizeof(MsgHeader));
             break;
     }
 }

@@ -6,7 +6,7 @@
 
 struct BeamReport
 {
-    static constexpr std::size_t kMsgId = 1;
+    static constexpr std::uint16_t kMsgId = 1;
 
     MsgHeader header{};
     std::size_t beam_id        = 0;
@@ -18,7 +18,7 @@ struct BeamReport
 
 struct GateAreaMsg
 {
-    static constexpr std::size_t kMsgId = 2;
+    static constexpr std::uint16_t kMsgId = 2;
 
     MsgHeader header{};
     double start_distance = 0.0;
@@ -29,7 +29,7 @@ struct GateAreaMsg
 
 struct ReportingAreaMsg
 {
-    static constexpr std::size_t kMsgId = 3;
+    static constexpr std::uint16_t kMsgId = 3;
 
     MsgHeader header{};
     double start_x = 0.0;
@@ -40,14 +40,14 @@ struct ReportingAreaMsg
 
 struct ReadCommand
 {
-    static constexpr std::size_t kMsgId = 4;
+    static constexpr std::uint16_t kMsgId = 4;
 
     MsgHeader header{};
 };
 
 struct MeasurementReport
 {
-    static constexpr std::size_t kMsgId = 5;
+    static constexpr std::uint16_t kMsgId = 5;
 
     MsgHeader header{};
     std::size_t measurement_timestamp = 0;

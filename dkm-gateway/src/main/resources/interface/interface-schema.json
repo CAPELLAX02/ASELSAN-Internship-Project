@@ -14,27 +14,27 @@
   "modules": [
     {
       "name": "RDP",
-      "id": 1,
+      "id": 4,
       "role": "DKM",
       "description": "The module under test. Never a link of its own -- it is the peer at the far end of every link."
     },
     {
       "name": "RSP",
-      "id": 2,
+      "id": 3,
       "role": "PEER",
       "port": 5001,
       "description": "Radar Signal Processor link."
     },
     {
       "name": "RSM",
-      "id": 3,
+      "id": 1,
       "role": "PEER",
       "port": 5002,
       "description": "Radar Scheduling Manager link."
     },
     {
       "name": "CRM",
-      "id": 4,
+      "id": 2,
       "role": "PEER",
       "port": 5003,
       "description": "Correlation / Racking Manager link."
@@ -45,28 +45,28 @@
     "fields": [
       {
         "name": "sender_id",
-        "type": "usize",
+        "type": "int8",
         "doc": "ModuleId of the sender."
       },
       {
         "name": "receiver_id",
-        "type": "usize",
+        "type": "int8",
         "doc": "ModuleId of the receiver."
       },
       {
         "name": "msg_id",
-        "type": "usize",
+        "type": "uint16",
         "doc": "Type discriminator, unique within a link."
       },
       {
-        "name": "timestamp",
-        "type": "usize",
-        "doc": "Milliseconds. Drives the shared replay clock."
+        "name": "msg_length",
+        "type": "uint32",
+        "doc": "Bytes of payload following this header. Total frame size on the wire is headerSize + msg_length."
       },
       {
-        "name": "msg_length",
-        "type": "usize",
-        "doc": "TOTAL bytes including this header. Authoritative for framing."
+        "name": "timestamp",
+        "type": "uint64",
+        "doc": "Milliseconds. Drives the shared replay clock."
       }
     ]
   },

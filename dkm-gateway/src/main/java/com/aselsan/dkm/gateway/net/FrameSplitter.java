@@ -93,22 +93,15 @@ public final class FrameSplitter {
                 break;
             }
             int base = src.readerIndex();
-            long declared = wire.readUnsigned(src, base + msgLengthOffset, msgLengthWidth);
-            if (declared < headerSize || declared > maxMessageBytes) {
-                // The bytes themselves, because the number alone cannot tell the
-                // two causes apart. A stream that genuinely desynchronised looks
-                // like noise here; a header the schema describes wrongly looks
-                // like a perfectly sensible message read from the wrong offsets,
-                // and the only way to see which is to put the peer's own bytes
-                // next to the struct it was supposed to have sent.
-                throw new DesyncException("msg_length = " + Long.toUnsignedString(declared)
-                        + " is not a plausible message size (header is " + headerSize
-                        + " bytes, read " + msgLengthWidth + " bytes at offset " + msgLengthOffset
-                        + ", ceiling is " + maxMessageBytes
-                        + ") -- the stream is out of sync or the peer's data model differs."
+            long declaredPayload = wire.readUnsigned(src, base + msgLengthOffset, msgLengthWidth);
+            long totalLength = headerSize + declaredPayload;
+            if (totalLength > maxMessageBytes) {
+                throw new DesyncException("msg_length (payload) = " + Long.toUnsignedString(declaredPayload)
+                        + " implies a " + totalLength + "-byte frame, over the " + maxMessageBytes + " ceiling"
+                        + " -- the stream is out of sync or the peer's data model differs."
                         + " First bytes on the wire: " + hexPreview(src, base, readable));
             }
-            int length = (int) declared;
+            int length = (int) totalLength;
             if (readable < length) {
                 break;
             }

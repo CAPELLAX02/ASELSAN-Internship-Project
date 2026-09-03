@@ -7,19 +7,19 @@
 // IDs the real DKM and its PCIe peers use.
 enum class ModuleId : std::size_t
 {
-    RDP = 1,
-    RSP = 2,
-    RSM = 3,
-    CRM = 4,
+    RDP = 4,
+    RSP = 3,
+    RSM = 1,
+    CRM = 2,
 };
 
 struct MsgHeader
 {
-    std::size_t sender_id;
-    std::size_t receiver_id;
-    std::size_t msg_id;
-    std::size_t timestamp;
-    std::size_t msg_length;
+    std::int8_t sender_id;
+    std::int8_t receiver_id;
+    std::uint16_t msg_id;
+    std::uint32_t msg_length;
+    std::uint64_t timestamp;
 };
 
 #endif /* INC_INTERFACE_COMMON_H_ */

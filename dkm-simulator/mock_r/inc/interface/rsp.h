@@ -14,7 +14,7 @@ struct Detection
 
 struct DetectionReport
 {
-    static constexpr std::size_t kMsgId = 1;
+    static constexpr std::uint16_t kMsgId = 1;
 
     MsgHeader header{};
     std::size_t beam_id             = 0;
@@ -25,7 +25,7 @@ struct DetectionReport
 
 struct JammerReport
 {
-    static constexpr std::size_t kMsgId = 2;
+    static constexpr std::uint16_t kMsgId = 2;
 
     MsgHeader header{};
     std::size_t beam_id          = 0;

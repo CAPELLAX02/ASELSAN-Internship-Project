@@ -6,7 +6,7 @@
 
 struct Prediction
 {
-    static constexpr std::size_t kMsgId = 1;
+    static constexpr std::uint16_t kMsgId = 1;
 
     MsgHeader header{};
     std::size_t track_id = 0;  // Identifies the tracked object -- repeated Predictions with the

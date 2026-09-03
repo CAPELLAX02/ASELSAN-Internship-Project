@@ -1,4 +1,4 @@
-#ifndef SRC_COMM_MESSAGE_CHANNEL_HPP_
+ #ifndef SRC_COMM_MESSAGE_CHANNEL_HPP_
 #define SRC_COMM_MESSAGE_CHANNEL_HPP_
 
 #include <atomic>
@@ -62,10 +62,10 @@ public:
     template <typename T>
     bool send(T msg)
     {
-        msg.header.sender_id   = static_cast<std::size_t>(local_id_);
-        msg.header.receiver_id = static_cast<std::size_t>(remote_id_);
+        msg.header.sender_id   = static_cast<std::int8_t>(local_id_);
+        msg.header.receiver_id = static_cast<std::int8_t>(remote_id_);
         msg.header.msg_id      = T::kMsgId;
-        msg.header.msg_length  = sizeof(T);
+        msg.header.msg_length  = static_cast<std::uint32_t>(sizeof(T) - sizeof(MsgHeader));
         msg.header.timestamp   = current_timestamp();
 
         std::lock_guard<std::mutex> lock(send_mutex_);
@@ -112,7 +112,7 @@ protected:
     // not underflow into a huge skip.
     static std::size_t body_size(const MsgHeader& header)
     {
-        return header.msg_length > sizeof(MsgHeader) ? header.msg_length - sizeof(MsgHeader) : 0;
+        return header.msg_length;
     }
 
     // Called on the receive thread for every message header read off the

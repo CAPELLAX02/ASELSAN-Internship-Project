@@ -69,10 +69,10 @@ struct Options
 template <typename T>
 void write_msg(std::ofstream& out, T msg, ModuleId sender, std::size_t timestamp)
 {
-    msg.header.sender_id   = static_cast<std::size_t>(sender);
-    msg.header.receiver_id = static_cast<std::size_t>(ModuleId::RDP);
+    msg.header.sender_id   = static_cast<std::int8_t>(sender);
+    msg.header.receiver_id = static_cast<std::int8_t>(ModuleId::RDP);
     msg.header.msg_id      = T::kMsgId;
-    msg.header.msg_length  = sizeof(T);
+    msg.header.msg_length  = static_cast<std::uint32_t>(sizeof(T) - sizeof(MsgHeader));
     msg.header.timestamp   = timestamp;
     out.write(reinterpret_cast<const char*>(&msg), sizeof(T));
 }

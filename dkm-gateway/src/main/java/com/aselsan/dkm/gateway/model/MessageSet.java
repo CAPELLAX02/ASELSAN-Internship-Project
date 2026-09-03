@@ -99,14 +99,16 @@ public final class MessageSet implements AutoCloseable {
                 notes.add("trailing " + (total - cursor) + " byte(s) are too short to be a header -- ignored");
                 break;
             }
-            long declared = codec.msgLength(source, cursor);
-            if (declared < headerSize || declared > total - cursor) {
+            long declaredPayload = codec.msgLength(source, cursor);
+            long declaredTotal = headerSize + declaredPayload;
+            if (declaredTotal > total - cursor) {
                 notes.add("message #" + entries.size() + " at byte " + cursor + " declares msg_length="
-                        + Long.toUnsignedString(declared) + ", which is impossible here -- stopping the scan");
+                        + Long.toUnsignedString(declaredPayload) + " (payload), implying a " + declaredTotal
+                        + "-byte frame, which is impossible here -- stopping the scan");
                 malformed++;
                 break;
             }
-            int length = (int) declared;
+            int length = (int) declaredTotal;
             entries.add(describe(source, cursor, length, Origin.FILE));
             cursor += length;
         }
